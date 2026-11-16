@@ -1,7 +1,9 @@
 -- @description GunKit RPM (respace folder items by rounds per minute)
 -- @author Jay Sabins
--- @version 1.0.0
+-- @version 1.1.0
 -- @changelog
+--   A preset tab with its own color now sets the accent color while it is showing (Apply button,
+--   sliders, checkmarks, volume bars). Tabs without a color use the accent from the gear button.
 --   First release. Select folder items (shots), drag the Rounds per minute slider and the shots
 --   move live on the timeline (play while you drag to hear it). Apply makes it stick with one
 --   undo point; Revert or closing the window puts everything back.
@@ -674,7 +676,17 @@ end
 -- ACCENT COLOR
 ------------------------------------------------------------------------------------------------
 
-local function accent_rgb() return accent or ACCENT_DEFAULT end
+-- The accent from the gear popup (or the built-in default).
+local function setting_accent() return accent or ACCENT_DEFAULT end
+-- The accent in use: the showing preset tab's color when it has one that differs from the
+-- setting, otherwise the setting. So a colored tab tints the whole window.
+local TAB_DEFAULT_RGB = 0x3C3C3C -- an uncolored tab's swatch
+local function accent_rgb()
+  local t = tabs.list[tabs.active]
+  local c = t and t.color
+  if c and c ~= TAB_DEFAULT_RGB and c ~= setting_accent() then return c end
+  return setting_accent()
+end
 -- Lighter (f > 0) or darker (f < 0) version of a 0xRRGGBB color.
 local function shade(rgb, f)
   local function ch(v)
@@ -834,10 +846,10 @@ local function look_popup()
     ImGui.AlignTextToFramePadding(ctx)
     ImGui.Text(ctx, "Accent color")
     ImGui.SameLine(ctx)
-    local ch, rgb = ImGui.ColorEdit3(ctx, "##accent", accent_rgb(),
+    local ch, rgb = ImGui.ColorEdit3(ctx, "##accent", setting_accent(),
       ImGui.ColorEditFlags_NoInputs | ImGui.ColorEditFlags_NoAlpha)
     if ch then accent = rgb; save_accent() end
-    tip("Apply button, sliders, checkmarks and volume bars.")
+    tip("Apply button, sliders, checkmarks and volume bars.\nA preset tab with its own color uses that color instead.")
     ImGui.SameLine(ctx)
     local is_default = accent == nil -- decided once for the Begin/EndDisabled pair
     if is_default then ImGui.BeginDisabled(ctx) end
@@ -962,11 +974,11 @@ local function section_tabs()
     if not i then ImGui.CloseCurrentPopup(ctx)
     else
       local tab = tab_edit
-      local default_rgb = 0x3C3C3C
+      local default_rgb = TAB_DEFAULT_RGB
       local ch, rgb = ImGui.ColorEdit3(ctx, "##tabcolor", tab.color or default_rgb,
         ImGui.ColorEditFlags_NoInputs | ImGui.ColorEditFlags_NoAlpha)
       if ch then tab.color = rgb; save_tabs() end
-      tip("Tab color")
+      tip("Tab color. While this tab is showing it is also the accent color.")
       ImGui.SameLine(ctx)
       ImGui.SetNextItemWidth(ctx, 180)
       if ImGui.IsWindowAppearing(ctx) then ImGui.SetKeyboardFocusHere(ctx) end

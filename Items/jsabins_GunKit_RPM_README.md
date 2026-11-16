@@ -58,7 +58,7 @@ Each tab along the top is a preset with its own rate, burst, trim and sculpt set
 
 ## Accent color
 
-The gear button in the title bar sets the accent color used by the Apply button, the sliders, the checkmarks and the volume bars. **Reset** goes back to the default green.
+The gear button in the title bar sets the accent color used by the Apply button, the sliders, the checkmarks and the volume bars. **Reset** goes back to the default green. A preset tab with its own color (right-click the tab) takes over the accent while that tab is showing, so each preset is easy to tell apart; tabs without a color use the gear setting.
 
 ## Look
 
