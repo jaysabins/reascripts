@@ -1,36 +1,26 @@
 -- @description Wwise Tool (send REAPER audio to Wwise)
 -- @author Jay Sabins
--- @version 1.22.0
+-- @version 1.23.0
 -- @changelog
---   Verdana is the window's font, at 12px; the title and section
---   headings are 14px.
---   Settings is its own window now: the main window no longer greys out while it's open, and
---   you can keep using both. Close it with its X, the Close button or Esc.
---   Settings pages are listed down the left side instead of as tabs across the top.
---   Buttons, fields, dropdowns, tabs, panels, scrollbars and the preview table get slightly
---   rounded corners everywhere (both windows), instead of hard right angles. The Wwise
---   structure table uses the same small corners as the preview table.
---   The text next to Transfer to Wwise is gone (its messages show in the button's tooltip), and
---   the preview now runs down to the bottom of the window, level with the button.
---   Fixed: Reset color on a tab stopped the script with an ImGui error.
---   The Wwise structure list is calmer ("Quiet rows"): no table lines or header, grey fields,
---   each level's type shown as a colored dot and name, and the $, template and + / - buttons
---   stay faint until you hover the row.
---   The preview's Source column is hidden by default (right-click a column header to show it).
---   A little more room under the section titles. Checkbox ticks take the showing tab's color.
---   The Settings window looks like the main window: big rounded corners, a big "Settings"
---   title and the same close X.
---   New Settings > Appearance page: title, text, dim text and background colors, window and
---   button corner rounding, and the font (family and sizes; applies when the window reopens).
---   Right-click any of them to reset just that one to its default.
---   Title-bar buttons (?, Settings, X) are flat and only show their box on hover (X red), and
---   the Settings gear is a thin outline cog.
---   The window title is bolder and 1px bigger (15px).
---   Removed the note under Source for Folder items (the dropdown's tooltip still explains it).
---   Fixed: the preview table's rounded corners showed through tooltips and popups.
---   A thin, lighter outline around the whole window (and Settings), with its own color in
---   Settings > Appearance.
---   The preview's Streaming column is now called Stream.
+--   New refresh button at the top right (left of ?), also on F5 while the window is focused:
+--   reconnects to Wwise and re-reads everything the window knows about it (project, languages,
+--   what already exists, the Wwise selection) to pick up changes made in Wwise.
+--   "From Wwise" next to the destination is now an icon button (an arrow into a circle), in the
+--   same flat style as the title-bar buttons, so the destination field is wider.
+--   Drag the edge between the left panel and the preview to make the panel wider or narrower.
+--   The width is remembered; double-click the edge to go back to the default.
+--   The connected dot is the same green as Transfer to Wwise.
+--   "Wwise destination" is now just "Destination", and "Originals subfolder" is now
+--   "Originals location". Its $ button is flat like the Wwise structure ones, and Browse is a
+--   flat folder icon.
+--   Every field and dropdown under Source and Destination has the same width.
+--   Checkbox ticks are white again (the text color) instead of the tab color.
+--   New "Renders location" under Destination: where this tab keeps rendered files, overriding
+--   the default. Settings > Rendering now holds the default renders location (same for every
+--   tab and project); leave the Destination field empty to use it.
+--   Buttons, fields and panels are rounder by default (8px instead of 3px). If you never
+--   changed that setting, you get the new default.
+--   Transfer to Wwise follows the Settings > Appearance "Buttons, fields and panels" slider.
 -- @provides
 --   [main] jsabins_Wwise Tool - Quick send.lua
 --   [nomain] jsabins_WwiseTool_core.lua
@@ -47,7 +37,7 @@
 --     (Actor-Mixers, Random/Sequence/Switch/Blend Containers, Virtual Folders,
 --     Work Units) named with REAPER wildcards like $region, $track, $item.
 --   - Property templates per level, Sound SFX or Sound Voice (with language),
---     Originals subfolder (wildcards allowed).
+--     Originals location (wildcards allowed).
 --   - Tabs, each a whole setup you can flick between. Conflict handling, structure and settings presets, export/import of the whole configuration, live preview (new vs existing objects),
 --     transfer summary. One Wwise undo step per transfer.
 --   - Auto mono/stereo: a Sound whose left and right match is made mono
@@ -91,7 +81,7 @@ local UI = {}
 -- view.look). Colors are 0xRRGGBBAA; nil means the built-in default. Fonts are made once at
 -- startup, so font changes apply the next time the window opens; everything else applies live.
 UI.FONT_CHOICES = { "Verdana", "Tahoma", "Segoe UI", "Arial", "Calibri", "Consolas" }
-UI.LOOK_DEFAULTS = { font = "Verdana", size = 12, head = 14, win_round = 14, frame_round = 3 }
+UI.LOOK_DEFAULTS = { font = "Verdana", size = 12, head = 14, win_round = 14, frame_round = 8 }
 UI.DEFAULT_TEXT, UI.DEFAULT_DIM, UI.DEFAULT_BG = 0xFFFFFFFF, 0x9A9A9AFF, 0x191919FF
 UI.DEFAULT_OUTLINE = 0x505050FF -- thin line around each floating window
 UI.look = {}
@@ -109,6 +99,9 @@ UI.read_look = function(t)
   L.head = num(t.head, 10, 24, d.head)
   L.win_round = num(t.win_round, 0, 20, d.win_round)
   L.frame_round = num(t.frame_round, 0, 10, d.frame_round)
+  -- 1.22.1: the default went from 3 to 8px; a saved 3 from 1.22.0 was the old default.
+  if (t.look_v or 0) < 1 and t.frame_round == 3 then L.frame_round = d.frame_round end
+  L.look_v = 1
   for _, k in ipairs({ "title", "text", "dim", "bg", "outline" }) do
     L[k] = type(t[k]) == "number" and (math.floor(t[k]) | 0xFF) or nil
   end
@@ -133,7 +126,7 @@ do
   local ok, f = pcall(ImGui.CreateFont, UI.FONT, UI.HEADER_FONT_SIZE)
   if ok and f and pcall(ImGui.Attach, ctx, f) then header_font = f end
 end
--- Bigger, matching titles for the left column's sections (Source, Wwise destination,
+-- Bigger, matching titles for the left column's sections (Source, Destination,
 -- Wwise structure). Falls back to the normal font if it can't be made.
 UI.SECTION_FONT_SIZE = UI.look.head
 local section_font = nil
@@ -183,6 +176,16 @@ end
 -- Tabs (see core.load_tabs): S is always the showing tab's settings table.
 local tabs = core.load_tabs()
 local S = tabs.list[tabs.active].s
+-- 1.23.0: "Keep rendered files in" became the default renders location (Settings, same
+-- everywhere), and each tab can override it under Destination. The first time, the showing
+-- tab's folder becomes the default, and tabs here with that same folder just use the default.
+if not r.HasExtState(core.EXT, "render_default") then
+  local old = S.render_folder or ""
+  core.set_render_default(old)
+  if old ~= "" then
+    for _, tab in ipairs(tabs.list) do if tab.s.render_folder == old then tab.s.render_folder = "" end end
+  end
+end
 core.http_port = S.http_port
 -- Look of the window (same in every project): background opacity, hidden preview columns,
 -- type colors and the unit the preview's Initial delay column shows ("s" or "ms").
@@ -198,6 +201,8 @@ local function read_view(t)
     if t.delay_unit == "ms" then view.delay_unit = "ms" end
     if type(t.size_v) == "number" then view.size_v = t.size_v end
     if type(t.cols_v) == "number" then view.cols_v = t.cols_v end
+    -- Width of the left panel, set by dragging its edge (nil = automatic).
+    if type(t.side_w) == "number" and t.side_w >= 200 then view.side_w = math.floor(t.side_w) end
     if t.look ~= nil then UI.read_look(t.look) end
   end
   view.look = UI.look
@@ -247,6 +252,7 @@ local open_summary = false
 local open_settings = false
 
 local COLOR_OK = 0x6BCB77FF
+UI.COLOR_TRANSFER = 0x1A7F37FF -- the "Transfer to Wwise" button's green (the connected dot uses it too)
 local COLOR_BAD = 0xFF6B6BFF
 local COLOR_DIM = UI.look.dim or UI.DEFAULT_DIM -- Settings > Appearance can change it
 local COLOR_NEW = 0x6BCB77FF     -- green: will be created
@@ -451,13 +457,16 @@ local function wildcard_menu(id, apply, ghost, size)
   end
 end
 
-local function from_wwise_button(id, apply)
+-- Flat icon buttons (title bar and fields); defined with the title-bar buttons below.
+local title_icon_button
+
+local function from_wwise_button(id, apply, size)
   ImGui.SameLine(ctx)
-  if ImGui.Button(ctx, "From Wwise##" .. id) then
+  if title_icon_button("##fromwwise" .. id, size or ImGui.GetFrameHeight(ctx), UI.draw_from_wwise) then
     local p, err = core.wwise_selection_path()
     if p then apply(p); settings_changed() else status_line = err or "" end
   end
-  if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Use the object selected in Wwise") end
+  if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "From Wwise: use the object selected in Wwise") end
 end
 
 ----------------------------------------------------------------------
@@ -530,7 +539,7 @@ local main_win_docked = false
 
 -- Title-bar button in the same style as the close X (rounded dark square), grey on hover.
 -- draw(dl, x1, y1, size, fg) draws the icon.
-local function title_icon_button(id, size, draw)
+title_icon_button = function(id, size, draw)
   local pressed = ImGui.InvisibleButton(ctx, id, size, size)
   local hovered, held = ImGui.IsItemHovered(ctx), ImGui.IsItemActive(ctx)
   local x1, y1 = ImGui.GetItemRectMin(ctx)
@@ -550,10 +559,52 @@ local function draw_question(dl, x1, y1, size, fg)
   if big then ImGui.PopFont(ctx) end
 end
 
+-- Refresh: a circular arrow, open at the top, its head pointing clockwise into the gap.
+UI.draw_refresh = function(dl, x1, y1, size, fg)
+  local cx, cy = x1 + size / 2, y1 + size / 2
+  local rad = size * 0.27
+  local th = math.max(1.2, size * 0.065)
+  local a0 = -math.pi / 2 + 0.55
+  local a1 = a0 + 2 * math.pi - 1.25
+  ImGui.DrawList_PathArcTo(dl, cx, cy, rad, a0, a1, 24)
+  ImGui.DrawList_PathStroke(dl, fg, 0, th)
+  -- Arrow head at the end of the arc, along its clockwise direction.
+  local ex, ey = cx + math.cos(a1) * rad, cy + math.sin(a1) * rad
+  local tx, ty = -math.sin(a1), math.cos(a1)  -- tangent (clockwise)
+  local nx, ny = math.cos(a1), math.sin(a1)   -- outward
+  local h, w = size * 0.15, size * 0.12
+  ImGui.DrawList_AddTriangleFilled(dl, ex + tx * h, ey + ty * h,
+    ex - tx * h * 0.25 + nx * w, ey - ty * h * 0.25 + ny * w,
+    ex - tx * h * 0.25 - nx * w, ey - ty * h * 0.25 - ny * w, fg)
+end
+-- From Wwise: a circle with an arrow pointing left, into the field next to it.
+UI.draw_from_wwise = function(dl, x1, y1, size, fg)
+  local cx, cy = x1 + size / 2, y1 + size / 2
+  local rad = size * 0.32
+  local th = math.max(1.2, size * 0.065)
+  ImGui.DrawList_AddCircle(dl, cx, cy, rad, fg, 0, th)
+  local l, rr = cx - rad * 0.55, cx + rad * 0.55
+  ImGui.DrawList_AddLine(dl, l + th, cy, rr, cy, fg, th)
+  local h = rad * 0.45
+  ImGui.DrawList_AddTriangleFilled(dl, l - th * 0.5, cy, l + h, cy - h * 0.85, l + h, cy + h * 0.85, fg)
+end
+-- Browse: a folder outline (tab on the top left).
+UI.draw_folder = function(dl, x1, y1, size, fg)
+  local th = math.max(1.2, size * 0.065)
+  local l, rr = x1 + size * 0.24, x1 + size * 0.76
+  local t, b = y1 + size * 0.30, y1 + size * 0.71
+  local tab_r, tab_h = l + size * 0.20, size * 0.07
+  ImGui.DrawList_PathLineTo(dl, l, b)
+  ImGui.DrawList_PathLineTo(dl, l, t)
+  ImGui.DrawList_PathLineTo(dl, tab_r, t)
+  ImGui.DrawList_PathLineTo(dl, tab_r + tab_h, t + tab_h)
+  ImGui.DrawList_PathLineTo(dl, rr, t + tab_h)
+  ImGui.DrawList_PathLineTo(dl, rr, b)
+  ImGui.DrawList_PathStroke(dl, fg, ImGui.DrawFlags_Closed, th)
+end
+
 UI.WINDOW_ROUNDING = UI.look.win_round   -- window corners (Settings > Appearance)
--- The "Transfer to Wwise" button sits in the window's bottom-left corner, inset by the window
--- padding on both sides, with corners concentric to the window's: radius = window radius - inset.
-UI.FRAME_ROUNDING = UI.look.frame_round -- dropdowns, fields, buttons, checkboxes, tabs, panels: just softened
+UI.FRAME_ROUNDING = UI.look.frame_round -- dropdowns, fields, buttons (Transfer too), checkboxes, tabs, panels
 -- Softly rounded corners for everything ImGui draws square by default. Pushed right after a
 -- window's Begin and popped (UI.pop_rounding) right before its End, on every path.
 UI.ROUNDING_VARS = { "StyleVar_FrameRounding", "StyleVar_GrabRounding", "StyleVar_PopupRounding",
@@ -567,6 +618,7 @@ UI.push_rounding = function()
   return n
 end
 UI.TRANSFER_H = 34        -- "Transfer to Wwise" button height
+UI.SIDE_MIN_W, UI.PREVIEW_MIN_W = 300, 280 -- narrowest left panel and preview when dragging the edge
 -- Close button: twice the font size each way (about 4x the area of ImGui's own X), with an even
 -- margin from the window's top and right edges. The title bar is made taller (FramePadding pushed
 -- around Begin) so the button plus its margins fit above the title bar's divider line.
@@ -594,6 +646,26 @@ local function status_items()
   return { { "Not connected", COLOR_BAD } }
 end
 
+-- Refresh (button or F5): reconnect and forget everything known about Wwise (project, languages,
+-- which objects exist, the destination's type, the Wwise selection), so the preview is rebuilt
+-- from what Wwise has now. Presets are re-read too, in case another window saved some.
+-- Not while a transfer runs, nor while a connect is already under way.
+UI.refresh_all = function()
+  if transfer_task or connecting then return end
+  core.disconnect()
+  bg_task = nil -- a half-done preview of the old state
+  forget_existing()
+  known_dest = nil
+  wwise_sel_path = nil
+  presets.structure, presets.settings = core.load_presets("structure"), core.load_presets("settings")
+  status_line = ""
+  retry_at, reconnect_at = nil, nil
+  sel_poll_at = 0
+  last_sig = nil
+  start_connect()
+end
+UI.REFRESH_TIP = "Refresh (F5): reconnect to Wwise and pick up changes made there"
+
 local function title_close_button()
   -- Status dot, Wwise project and Wwise version, right-aligned to right_x and centered on a
   -- row of height h starting at top (screen coordinates). Normal font, sized to the buttons.
@@ -606,7 +678,7 @@ local function title_close_button()
     local th = ImGui.GetTextLineHeight(ctx)
     local x, y = right_x - w, top + (h - th) / 2
     ImGui.DrawList_AddCircleFilled(ImGui.GetWindowDrawList(ctx), x + dot / 2, top + h / 2, dot / 2,
-      conn and COLOR_OK or COLOR_BAD)
+      conn and UI.COLOR_TRANSFER or COLOR_BAD)
     x = x + dot + sp
     for _, it in ipairs(items) do
       ImGui.SetCursorScreenPos(ctx, x, y)
@@ -637,6 +709,10 @@ local function title_close_button()
   ImGui.SetCursorScreenPos(ctx, x, wy + m)
   if title_icon_button("##guide_t", size, draw_question) then open_url(GUIDE_URL) end
   if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Open the Wwise Tool guide on GitHub") end
+  x = x - gap - size
+  ImGui.SetCursorScreenPos(ctx, x, wy + m)
+  if title_icon_button("##refresh_t", size, UI.draw_refresh) then UI.refresh_all() end
+  if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, UI.REFRESH_TIP) end
   -- Connection status to the left of the buttons.
   title_status(x - gap * 2, wy + m, size)
   -- Big bold "Wwise Tool" at the left of the title bar, centered on the buttons' row.
@@ -661,7 +737,7 @@ local function section_connection()
     local dot = big and 10 or 8
     local dl = ImGui.GetWindowDrawList(ctx)
     local x, y = ImGui.GetCursorScreenPos(ctx)
-    ImGui.DrawList_AddCircleFilled(dl, x + dot / 2, y + lh / 2, dot / 2, conn and COLOR_OK or COLOR_BAD)
+    ImGui.DrawList_AddCircleFilled(dl, x + dot / 2, y + lh / 2, dot / 2, conn and UI.COLOR_TRANSFER or COLOR_BAD)
     ImGui.Dummy(ctx, dot, lh)
     ImGui.SameLine(ctx)
     ImGui.AlignTextToFramePadding(ctx)
@@ -676,10 +752,13 @@ local function section_connection()
     local spacing = ImGui.GetStyleVar(ctx, ImGui.StyleVar_ItemSpacing)
     local qw = ImGui.CalcTextSize(ctx, "?") + pad_x * 2
     local fh = ImGui.GetFrameHeight(ctx)
-    local bw = qw + spacing + fh
+    local bw = fh + spacing + qw + spacing + fh
     ImGui.SameLine(ctx)
     local avail = ImGui.GetContentRegionAvail(ctx)
     if avail > bw then ImGui.SetCursorPosX(ctx, ImGui.GetCursorPosX(ctx) + avail - bw) end
+    if title_icon_button("##refresh_d", fh, UI.draw_refresh) then UI.refresh_all() end
+    if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, UI.REFRESH_TIP) end
+    ImGui.SameLine(ctx)
     if ImGui.Button(ctx, "?") then open_url(GUIDE_URL) end
     if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Open the Wwise Tool guide on GitHub") end
     ImGui.SameLine(ctx)
@@ -693,7 +772,7 @@ local function section_connection()
     if ImGui.BeginChild(ctx, "connerr", 0, 0, ImGui.ChildFlags_Border | ImGui.ChildFlags_AutoResizeY) then
       ImGui.PushTextWrapPos(ctx, 0)
       ImGui.TextColored(ctx, 0xF3D6A0FF, conn_err)
-      ImGui.TextColored(ctx, 0xF3D6A0FF, "When Wwise is ready, open Settings and click Reconnect.")
+      ImGui.TextColored(ctx, 0xF3D6A0FF, "When Wwise is ready, click Refresh (top right) or press F5.")
       ImGui.PopTextWrapPos(ctx)
       ImGui.EndChild(ctx)
     end
@@ -755,11 +834,19 @@ local function presets_button(kind, label, tip)
   end
 end
 
+-- Every field and dropdown under Source and Destination has this width, so they all end at the
+-- same place. Room is left on the right for two square buttons (like $ and Browse).
+UI.side_field_w = function()
+  local sq = ImGui.GetFrameHeight(ctx)
+  local sp = ImGui.GetStyleVar(ctx, ImGui.StyleVar_ItemSpacing)
+  return math.max(80, ImGui.GetContentRegionAvail(ctx) - 2 * (sq + sp))
+end
+
 local function section_source()
   section_title("Source")
   local changed
   changed, S.source = combo("##source", { { "items", "Selected items" }, { "folders", "Folder items (ignore their child items)" },
-    { "render", "REAPER render settings (regions, stems, matrix...)" } }, S.source, -1)
+    { "render", "REAPER render settings (regions, stems, matrix...)" } }, S.source, UI.side_field_w())
   if changed then settings_changed() end
   if ImGui.IsItemHovered(ctx) then
     ImGui.SetTooltip(ctx, "Selected items: every selected item is sent.\n" ..
@@ -779,7 +866,7 @@ local function section_source()
   ImGui.Dummy(ctx, 0, 4)
 end
 
--- Point the Originals subfolder at a path relative to the Originals folder. A path in
+-- Point the Originals location at a path relative to the Originals folder. A path in
 -- Originals\Voices\<language> switches the Sound to Sound Voice in that language, one in
 -- Originals\SFX switches it to Sound SFX, so the import lands where the folder is.
 local function set_originals_from(rel)
@@ -803,7 +890,7 @@ local function set_originals_from(rel)
   return true
 end
 
--- Pick the Originals subfolder in a folder dialog. It opens in the current Originals\SFX
+-- Pick the Originals location in a folder dialog. It opens in the current Originals\SFX
 -- (or Voices\<language>) folder, but any folder in Originals\SFX or Originals\Voices\<language>
 -- can be picked.
 local function browse_originals()
@@ -817,7 +904,7 @@ local function browse_originals()
     local cur = S.originals_subfolder or ""
     if cur ~= "" and not cur:find("$", 1, true) then table.insert(starts, 1, root .. "\\" .. cur:gsub("/", "\\")) end
   end
-  local f, err = core.browse_folder("Choose the Originals subfolder, inside " .. orig ..
+  local f, err = core.browse_folder("Choose the Originals location, inside " .. orig ..
     "\\SFX (sound effects) or " .. orig .. "\\Voices\\<language> (voice-over)", starts)
   if not f then if err then status_line = err end return end
   local rel = core.relative_to(f, orig)
@@ -825,8 +912,24 @@ local function browse_originals()
   set_originals_from(rel)
 end
 
+-- Pick a renders folder. which = "render_folder" (this tab's override) or "default" (Settings).
+-- A folder inside the project folder is kept relative, so it moves with the project.
+UI.browse_renders = function(which)
+  local cur = which == "default" and { render_folder = core.render_default() } or S
+  local base, rest = core.render_folder_parts(cur)
+  local proj = core.project_dir()
+  local f, err = core.browse_folder("Choose a folder for rendered files", { base or proj, proj })
+  if not f then if err then status_line = err end return end
+  local rel = proj ~= "" and core.relative_to(f, proj) or nil
+  local v = (rel and rel ~= "") and rel or f
+  if rest and rest ~= "" then v = v .. "\\" .. rest:gsub("/", "\\") end -- keep its wildcard part
+  if which == "default" then core.set_render_default(v) else S.render_folder = v; settings_changed() end
+end
+
 local function section_destination()
-  section_title("Wwise destination")
+  section_title("Destination")
+  local fw = UI.side_field_w()
+  local sq = ImGui.GetFrameHeight(ctx)
   local c
   c, S.use_wwise_selection = ImGui.Checkbox(ctx, "Always use the object selected in Wwise", S.use_wwise_selection)
   if c then settings_changed(); sel_poll_at = 0 end
@@ -837,23 +940,45 @@ local function section_destination()
     ImGui.Text(ctx, wwise_sel_path or "(nothing selected in Wwise)")
     ImGui.PopTextWrapPos(ctx)
   else
-    S.destination = input("##dest", S.destination, "\\Containers\\Default Work Unit", -86)
-    from_wwise_button("dest", function(p) S.destination = p end)
+    S.destination = input("##dest", S.destination, "\\Containers\\Default Work Unit", fw)
+    from_wwise_button("dest", function(p) S.destination = p end, sq)
   end
   ImGui.Dummy(ctx, 0, 2)
-  dim_label("Originals subfolder")
-  S.originals_subfolder = input("##orig", S.originals_subfolder, "optional, e.g. Weapons\\$region", -96)
+  dim_label("Originals location")
+  S.originals_subfolder = input("##orig", S.originals_subfolder, "optional, e.g. Weapons\\$region", fw)
   -- A typed "SFX\..." or "Voices\<language>\..." path is taken from the Originals folder.
   if ImGui.IsItemDeactivatedAfterEdit(ctx) then
     local first = (S.originals_subfolder or ""):gsub("/", "\\"):match("^\\?([^\\]+)")
     if first and (first:lower() == "sfx" or first:lower() == "voices") then set_originals_from(S.originals_subfolder) end
   end
-  wildcard_menu("orig", function(w) S.originals_subfolder = S.originals_subfolder .. w end)
+  if ImGui.IsItemHovered(ctx) then
+    ImGui.SetTooltip(ctx, "Folder inside the Wwise project's Originals folder (SFX or Voices\\<language>)\n" ..
+      "where the imported audio files go. Empty: straight in Originals\\SFX (or the language folder).")
+  end
+  wildcard_menu("orig", function(w) S.originals_subfolder = S.originals_subfolder .. w end, true, sq)
   ImGui.SameLine(ctx)
-  if ImGui.Button(ctx, "Browse##orig") then browse_originals() end
-  if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Pick a folder inside the Wwise project's Originals folder:\nOriginals\\SFX for sound effects, Originals\\Voices\\<language> for voice-over.\nPicking a Voices folder switches the Sound to Sound Voice in that language.") end
+  if title_icon_button("##browseorig", sq, UI.draw_folder) then browse_originals() end
+  if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Browse: pick a folder inside the Wwise project's Originals folder:\nOriginals\\SFX for sound effects, Originals\\Voices\\<language> for voice-over.\nPicking a Voices folder switches the Sound to Sound Voice in that language.") end
+  ImGui.Dummy(ctx, 0, 2)
+  dim_label("Renders location")
+  local def = core.render_default()
+  S.render_folder = input("##renderover", S.render_folder,
+    def ~= "" and ("default: " .. def) or "default: temporary (set in Settings > Rendering)", fw)
+  if ImGui.IsItemHovered(ctx) then
+    local base, rest = core.render_folder_parts(S)
+    ImGui.SetTooltip(ctx, "Where files rendered for this tab are kept (selected items and folder items).\n" ..
+      "Empty: the default from Settings > Rendering. Relative paths start in the project folder;\n" ..
+      "REAPER wildcards are allowed. With Source: render settings, files go where those settings say.\n\n" ..
+      (base and ("Now: " .. base .. ((rest ~= "") and ("\\" .. rest:gsub("/", "\\")) or ""))
+        or "Now: a temporary folder, deleted after the transfer."))
+  end
+  wildcard_menu("rover", function(w) S.render_folder = (S.render_folder or "") .. w end, true, sq)
+  ImGui.SameLine(ctx)
+  if title_icon_button("##browserender", sq, UI.draw_folder) then UI.browse_renders("render_folder") end
+  if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Browse for this tab's renders folder") end
+  ImGui.Dummy(ctx, 0, 2)
   dim_label("If a Sound or container already exists")
-  c, S.conflict = combo("##conflict", core.CONFLICT_OPS, S.conflict, -1)
+  c, S.conflict = combo("##conflict", core.CONFLICT_OPS, S.conflict, fw)
   if c then settings_changed() end
   ImGui.Dummy(ctx, 0, 2)
   c, S.set_initial_delay = ImGui.Checkbox(ctx, "Set Initial Delay from layer timing", S.set_initial_delay)
@@ -862,7 +987,7 @@ local function section_destination()
     "count as one shot; each layer's Initial Delay is how far it starts after the\n" ..
     "shot's first item. Leave a gap between shots. The delays show in the preview.")
   if S.set_initial_delay then
-    c, S.delay_target = combo("##delaytarget", core.DELAY_TARGETS, S.delay_target, -1)
+    c, S.delay_target = combo("##delaytarget", core.DELAY_TARGETS, S.delay_target, fw)
     if c then settings_changed() end
     local n = 0
     for _ in pairs(plan.delays or {}) do n = n + 1 end
@@ -1750,7 +1875,7 @@ local function section_transfer(bw)
   local problems = core.validate(S)
   -- Why the button is greyed out (first reason wins).
   local why
-  if not conn then why = "Not connected to Wwise. Open Settings and click Reconnect."
+  if not conn then why = "Not connected to Wwise. Click Refresh (top right) or press F5."
   elseif current_destination() == "" then
     why = S.use_wwise_selection and "Select a parent object in Wwise (or untick \"Always use the object selected in Wwise\")."
       or "Set an import destination."
@@ -1765,15 +1890,13 @@ local function section_transfer(bw)
   if busy then ImGui.BeginDisabled(ctx)
   else
     -- Green when ready; the greyed-out look stays as it was while disabled.
-    ImGui.PushStyleColor(ctx, ImGui.Col_Button, 0x1A7F37FF)
+    ImGui.PushStyleColor(ctx, ImGui.Col_Button, UI.COLOR_TRANSFER)
     ImGui.PushStyleColor(ctx, ImGui.Col_ButtonHovered, 0x2C974BFF)
     ImGui.PushStyleColor(ctx, ImGui.Col_ButtonActive, 0x166A2EFF)
     ImGui.PushStyleColor(ctx, ImGui.Col_Text, 0xFFFFFFFF)
   end
-  local inset = ImGui.GetStyleVar(ctx, ImGui.StyleVar_WindowPadding)
-  ImGui.PushStyleVar(ctx, ImGui.StyleVar_FrameRounding, math.max(2, UI.WINDOW_ROUNDING - inset))
+  -- Same corners as the other buttons (Settings > Appearance > Buttons, fields and panels).
   if ImGui.Button(ctx, transfer_task and "Transferring..." or "Transfer to Wwise", bw, UI.TRANSFER_H) and not transfer_task then do_transfer() end
-  ImGui.PopStyleVar(ctx)
   if busy then ImGui.EndDisabled(ctx) else ImGui.PopStyleColor(ctx, 4) end
   -- Tooltip: the latest message (transfer progress, a preset or folder problem), then why it's greyed out.
   local tip = (status_line ~= "" and why and status_line ~= why) and (status_line .. "\n" .. why) or
@@ -1852,16 +1975,28 @@ local function settings_rendering()
   if c then settings_changed() end
   help("An empty item on a folder track renders the folder's mix (folder + children)\nover that item's time range, named after the item.")
   ImGui.Dummy(ctx, 0, 4)
-  dim_label("Keep rendered files in")
-  S.render_folder = input("##renderfolder", S.render_folder, "(empty: temporary, deleted after the transfer)", 380)
-  wildcard_menu("rf", function(w) S.render_folder = S.render_folder .. w end)
-  help("A folder for the files rendered from selected items, e.g. Renders or Renders\\$project.\n" ..
-    "Relative paths start in the project folder. REAPER wildcards are allowed.\n" ..
-    "A file there with the same name as a new render is replaced.\n" ..
-    "Untouched WAV items aren't rendered (they import straight from disk) unless that option is off.")
+  dim_label("Default renders location")
   do
-    local base, rest = core.render_folder_parts(S)
+    local def = core.render_default()
+    ImGui.SetNextItemWidth(ctx, 380)
+    local ch, v = ImGui.InputTextWithHint(ctx, "##renderdefault", "(empty: temporary, deleted after the transfer)", def)
+    if ch then core.set_render_default(v); last_sig = nil end
+    wildcard_menu("rf", function(w) core.set_render_default(core.render_default() .. w) end, true, ImGui.GetFrameHeight(ctx))
+    ImGui.SameLine(ctx)
+    if title_icon_button("##browserdef", ImGui.GetFrameHeight(ctx), UI.draw_folder) then UI.browse_renders("default") end
+    if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Browse for the default renders folder") end
+    help("A folder for the files rendered from selected items and folder items, e.g. Renders or Renders\\$project.\n" ..
+      "Same for every tab and project. A tab can use its own folder instead: Destination > Renders location.\n" ..
+      "Relative paths start in the project folder. REAPER wildcards are allowed.\n" ..
+      "A file there with the same name as a new render is replaced.\n" ..
+      "Untouched WAV items aren't rendered (they import straight from disk) unless that option is off.")
+    local base, rest = core.render_folder_parts({ render_folder = core.render_default() })
     if base then ImGui.TextDisabled(ctx, base .. ((rest ~= "") and ("\\" .. rest:gsub("/", "\\")) or "")) end
+    if (S.render_folder or "") ~= "" then
+      ImGui.PushTextWrapPos(ctx, 0)
+      dim_label("The showing tab uses its own folder (Destination > Renders location): " .. S.render_folder)
+      ImGui.PopTextWrapPos(ctx)
+    end
   end
 end
 
@@ -2384,6 +2519,7 @@ apply_imported_config = function(cfg)
     UI.TABLE_ROUNDING = UI.FRAME_ROUNDING + 1
     save_view()
   end
+  if cfg.render_default then core.set_render_default(cfg.render_default) end
   tabs = cfg.tabs
   for _, tab in ipairs(tabs.list) do tab.s.http_port = port end
   S = tabs.list[tabs.active].s
@@ -2669,11 +2805,8 @@ loop_body = function()
   ImGui.PushStyleColor(ctx, ImGui.Col_TitleBgActive, title_bg)
   ImGui.PushStyleColor(ctx, ImGui.Col_TitleBgCollapsed, title_bg)
   local theme_n = push_grey_theme()
-  -- Checkbox ticks (and radio dots) take the showing tab's color, when it has one.
-  do
-    local at = tabs.list[tabs.active]
-    if at and at.color then ImGui.PushStyleColor(ctx, ImGui.Col_CheckMark, (at.color << 8) | 0xFF); theme_n = theme_n + 1 end
-  end
+  -- Checkbox ticks (and radio dots) are the text color (white by default).
+  ImGui.PushStyleColor(ctx, ImGui.Col_CheckMark, UI.look.text or UI.DEFAULT_TEXT); theme_n = theme_n + 1
   -- No p_open: ImGui's small title-bar X is replaced by our big X in the same corner, and the
   -- title bar is made taller to fit it. When docked there's no title bar, so the dock tab gets
   -- ImGui's normal X instead (main_win_docked is from the last frame).
@@ -2719,6 +2852,12 @@ loop_body = function()
       sel_poll_at = 0; forget_existing(); last_sig = nil
     end
     was_focused = focused
+    -- F5 refreshes, only while this window (or one of its children) has focus and no field is
+    -- being typed in.
+    if ImGui.IsWindowFocused(ctx, ImGui.FocusedFlags_RootAndChildWindows) and not ImGui.IsAnyItemActive(ctx)
+      and ImGui.IsKeyPressed(ctx, ImGui.Key_F5, false) then
+      UI.refresh_all()
+    end
     -- Floating: start the tabs a few pixels higher (still inside the content area) so they sit
     -- close under the title. The tab bar always follows, so the cursor move has an item after it.
     if own_bg then ImGui.SetCursorPosY(ctx, ImGui.GetCursorPosY(ctx) - 4) end
@@ -2726,7 +2865,11 @@ loop_body = function()
     section_tabs()
     -- Layout: setup on the left, preview + transfer on the right.
     local avail_w = ImGui.GetContentRegionAvail(ctx)
-    local left_w = math.floor(math.max(340, math.min(440, avail_w * 0.42)))
+    local sp_x = ImGui.GetStyleVar(ctx, ImGui.StyleVar_ItemSpacing)
+    -- Left panel width: dragged by its edge (view.side_w, remembered), else automatic.
+    local auto_w = math.floor(math.max(340, math.min(440, avail_w * 0.42)))
+    local min_w, max_w = UI.SIDE_MIN_W, math.max(UI.SIDE_MIN_W, avail_w - UI.PREVIEW_MIN_W)
+    local left_w = math.floor(math.max(min_w, math.min(max_w, UI.side_drag_w or view.side_w or auto_w)))
     -- Left column: setup panel with the Transfer button under it. The preview on the right runs
     -- all the way down, so its bottom lines up with the button's.
     local _, sp_y = ImGui.GetStyleVar(ctx, ImGui.StyleVar_ItemSpacing)
@@ -2742,7 +2885,32 @@ loop_body = function()
     end
     section_transfer(left_w) -- as wide as the left panel
     ImGui.EndGroup(ctx)
-    ImGui.SameLine(ctx)
+    -- The gap between the left panel and the preview is a drag handle for the panel's width.
+    ImGui.SameLine(ctx, 0, 0)
+    local _, avail_h = ImGui.GetContentRegionAvail(ctx)
+    ImGui.InvisibleButton(ctx, "##sidesplit", sp_x, math.max(1, avail_h))
+    local split_active = ImGui.IsItemActive(ctx)
+    if split_active or ImGui.IsItemHovered(ctx) then
+      ImGui.SetMouseCursor(ctx, ImGui.MouseCursor_ResizeEW)
+      local x1, y1 = ImGui.GetItemRectMin(ctx)
+      local x2, y2 = ImGui.GetItemRectMax(ctx)
+      local mid = math.floor((x1 + x2) / 2) + 0.5
+      ImGui.DrawList_AddLine(ImGui.GetWindowDrawList(ctx), mid, y1 + 4, mid, y2 - 4,
+        split_active and 0x9A9A9AFF or 0x6A6A6AFF, 2)
+    end
+    if ImGui.IsItemHovered(ctx) and ImGui.IsMouseDoubleClicked(ctx, ImGui.MouseButton_Left) then
+      UI.side_drag_w = nil; view.side_w = nil; save_view()
+    elseif split_active then
+      local dx = ImGui.GetMouseDragDelta(ctx, ImGui.MouseButton_Left, 0)
+      if dx ~= 0 then
+        UI.side_drag_w = math.max(min_w, math.min(max_w, left_w + dx))
+        ImGui.ResetMouseDragDelta(ctx, ImGui.MouseButton_Left)
+      end
+    end
+    if ImGui.IsItemDeactivated(ctx) and UI.side_drag_w then
+      view.side_w = math.floor(UI.side_drag_w); UI.side_drag_w = nil; save_view()
+    end
+    ImGui.SameLine(ctx, 0, 0)
     if ImGui.BeginChild(ctx, "previewpane", 0, 0) then
       section_preview()
       ImGui.EndChild(ctx)

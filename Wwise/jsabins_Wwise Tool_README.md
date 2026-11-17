@@ -18,7 +18,7 @@ Wwise Tool is a free REAPER script by Jay Sabins, written in Lua with a ReaImGui
 - **Live preview.** See every object that will be created, marked New, Exists or Duplicate, before anything is sent.
 - **Conflict handling.** Choose to reuse, replace or rename objects that already exist.
 - **SFX and Voice.** Import as Sound SFX or as Sound Voice in a chosen language.
-- **Originals subfolders** with wildcards, and a folder picker for your Wwise project's Originals folder (SFX or any Voices language).
+- **Originals location** with wildcards, and a folder picker for your Wwise project's Originals folder (SFX or any Voices language).
 - **Tabs.** Each tab along the top holds a whole setup (structure and settings) and can have its own color, so you can flick between, say, a weapons setup and a footsteps setup with one click.
 - **Two kinds of presets.** Structure presets hold just the Wwise structure; settings presets hold everything else. Load one without touching the other.
 - **One undo step.** Each transfer is a single undo in Wwise.
@@ -84,11 +84,13 @@ The window opens at a standard size. Resize it by dragging its edges, and drag i
 
 The top-right corner shows a green dot when you're connected, then the Wwise project name and version, then three buttons: **?** opens this guide in your web browser, the gear opens **Settings**, and **X** closes the window. When the window is docked, the status and the **?** and gear buttons sit in a bar at the top of the window instead.
 
-The window opens right away and connects to Wwise in the background (the bar says **Connecting to Wwise...** meanwhile). If Wwise is busy, for example still loading a project, it tries again by itself every few seconds. If Wwise can't be reached, the dot turns red and a yellow banner explains why. If you opened Wwise after REAPER, or Wwise restarted, open **Settings** and click **Reconnect**.
+The window opens right away and connects to Wwise in the background (the bar says **Connecting to Wwise...** meanwhile). If Wwise is busy, for example still loading a project, it tries again by itself every few seconds. If Wwise can't be reached, the dot turns red and a yellow banner explains why. If you opened Wwise after REAPER, Wwise restarted, or you changed something in Wwise (renamed or added objects, switched project), click the **refresh** button at the top right (left of **?**) or press **F5** while the window is focused. It reconnects and re-reads everything the window knows about Wwise. **Settings > Connection > Reconnect** does the same.
+
+The left panel's width can be changed: drag the edge between it and the preview. The width is remembered; double-click the edge to go back to the default.
 
 ### Tabs
 
-Under the toolbar is a row of tabs. Each tab is a complete setup: the Wwise structure, the destination, the source, the Originals subfolder, the conflict and Initial Delay options, the Mono/Stereo, Streaming and Loop choices from the preview, and the Rendering, Channels, Transfer and Stream & loop options in **Settings**. Click a tab to switch to it; everything on the left and the preview change to that tab's setup. Only the connection port is shared by all tabs.
+Under the toolbar is a row of tabs. Each tab is a complete setup: the Wwise structure, the destination, the source, the Originals location, the Renders location, the conflict and Initial Delay options, the Mono/Stereo, Streaming and Loop choices from the preview, and the Rendering, Channels, Transfer and Stream & loop options in **Settings**. Click a tab to switch to it; everything on the left and the preview change to that tab's setup. Only the connection port is shared by all tabs.
 
 - **+** adds a new tab that starts as a copy of the one showing.
 - **Double-click** a tab to rename it.
@@ -104,7 +106,7 @@ Presets still work inside a tab: loading a structure or settings preset changes 
 There are two kinds of presets, so you can load one part of a setup without changing the rest:
 
 - **Structure presets...** (under **Wwise structure**) save just the structure: the levels, their names and property templates, and the Sound row (SFX or Voice, name, template and language).
-- **Settings presets...** (in **Settings > Configuration**) save everything else: the source, the Wwise destination, the Originals subfolder, the conflict choice, the Initial Delay options, and the rendering and transfer options in **Settings**.
+- **Settings presets...** (in **Settings > Configuration**) save everything else: the source, the destination, the Originals location, the Renders location, the conflict choice, the Initial Delay options, and the rendering and transfer options in **Settings**.
 
 In either popup, click a name under **Load** to load it. To save, type a name and click **Save** (an existing name is overwritten). To delete, type or load its name and click **Delete**.
 
@@ -112,7 +114,7 @@ The connection port and the Mono/Stereo choices from the preview are never part 
 
 ### Export and import the whole configuration
 
-**Settings > Configuration > Export configuration...** saves everything to one `.json` file: every tab (its structure, settings, name and color), all structure and settings presets, and the window's look (opacity, visible columns, type colors, delay unit). **Import configuration...** loads such a file: this project's tabs and the window's look are replaced, presets from the file are added (a preset with the same name is overwritten, your others stay), and your connection port is kept. Use it to back up a setup or move it to another computer.
+**Settings > Configuration > Export configuration...** saves everything to one `.json` file: every tab (its structure, settings, name and color), all structure and settings presets, and the window's look (opacity, visible columns, type colors, delay unit), plus the default renders location. **Import configuration...** loads such a file: this project's tabs and the window's look are replaced, presets from the file are added (a preset with the same name is overwritten, your others stay), and your connection port is kept. Use it to back up a setup or move it to another computer.
 
 Presets from before version 1.11 held the structure plus the Originals subfolder, conflict choice and template option. The first time you open 1.11 or later, each one is split into a structure preset and a settings preset with the same name, so nothing is lost.
 
@@ -129,11 +131,12 @@ Choose what gets sent:
 
 The Sound's name comes from the item's take name (or the rendered file's name in render settings mode), unless you give the Sound level a name pattern (see below).
 
-### Wwise destination
+### Destination
 
 - **Always use the object selected in Wwise** (on by default) sends the Sounds into whatever is selected in Wwise when you click Transfer. If a Sound is selected, its parent is used.
-- Untick it to use a fixed path instead. Type the path, or select the object in Wwise and click **From Wwise**.
-- **Originals subfolder** sets where Wwise stores the WAV files inside its Originals folder. It accepts wildcards, for example `Weapons\$region`. **Browse** opens a folder picker inside the Wwise project's Originals folder, so you can pick or create a folder instead of typing. Pick anything inside `Originals\SFX` for sound effects or `Originals\Voices\<language>` for voice-over. Picking a Voices folder switches the Sound to **Sound Voice** in that language, so the files import as voice in that language; picking an SFX folder switches it back to **Sound SFX**. Typing a path that starts with `SFX\` or `Voices\<language>\` works the same way.
+- Untick it to use a fixed path instead. Type the path, or select the object in Wwise and click the **From Wwise** button (the arrow in a circle) next to the field.
+- **Originals location** sets where Wwise stores the WAV files inside its Originals folder. It accepts wildcards, for example `Weapons\$region`. The folder button (**Browse**) opens a folder picker inside the Wwise project's Originals folder, so you can pick or create a folder instead of typing. Pick anything inside `Originals\SFX` for sound effects or `Originals\Voices\<language>` for voice-over. Picking a Voices folder switches the Sound to **Sound Voice** in that language, so the files import as voice in that language; picking an SFX folder switches it back to **Sound SFX**. Typing a path that starts with `SFX\` or `Voices\<language>\` works the same way.
+- **Renders location** is where this tab keeps the files it renders (selected items and folder items). Leave it empty to use the default from **Settings > Rendering**; the field's grey hint shows what that is. Type a folder (wildcards allowed, relative paths start in the REAPER project folder) or click its folder button to pick one. It's saved with the tab and in settings presets.
 - **If a Sound or container already exists**:
   - **Use existing** keeps the object and replaces its audio. Good for iterating on a sound.
   - **Replace** deletes the object and creates it again.
@@ -203,7 +206,7 @@ The right side shows what the transfer will create, laid out like Wwise's Projec
 - Each object is marked **New** (green), **Exists** (orange) or **Duplicate** (two items would end up with the same name and path).
 - The tag in front of each name, such as `[RND]` or `[SFX]`, shows its type. Hover over it for the full type name.
 - The top row is the import destination, and its tag shows what that object is in Wwise: `[WU]` for a Work Unit, `[VF]` for a Virtual Folder, `[RND]`, `[SEQ]`, `[SW]`, `[BLD]` for containers, `[AM]` for an Actor-Mixer (`[PC]` for a Property Container in Wwise 2025.1 and later), and so on. It shows `[DEST]` while Wwise isn't connected or the destination doesn't exist yet.
-- Hover over a name to see its full Wwise path and Originals subfolder.
+- Hover over a name to see its full Wwise path and Originals location.
 - **Columns:**
   - **Source** (hidden by default; right-click a header to show it) says where the audio file Wwise imports comes from (hover the header or a value for a reminder):
     - **Original WAV**: the item's own WAV file is imported as is, no render. Only for untouched items (whole file, no fades, FX, volume, pitch or rate changes).
@@ -283,7 +286,7 @@ The gear button opens **Settings** in its own window. The main window stays usab
   - **Import untouched WAV files directly (no render).** Turn it off to always render.
   - **Render items through track FX and master.** Off renders just the items.
   - **Render folder items through master.**
-  - **Keep rendered files in:** by default, item renders go to a temporary folder that's deleted after the transfer. Type a folder to keep them, such as `Renders` or `Renders\$project`. Relative paths start in the REAPER project folder, and wildcards are allowed. A file there with the same name as a new render is replaced.
+  - **Default renders location:** by default, item renders go to a temporary folder that's deleted after the transfer. Type a folder to keep them, such as `Renders` or `Renders\$project`. Relative paths start in the REAPER project folder, and wildcards are allowed. A file there with the same name as a new render is replaced. This is the default for every tab and project; a tab can use its own folder instead (**Destination > Renders location**).
 - **Channels:** **Auto channels: make a Sound mono when left and right are the same.** On by default. See [Mono and stereo](#mono-and-stereo). When you've set any Mono/Stereo choices in the preview, **Clear channel overrides** appears here.
 - **Transfer:** paste templates onto all objects or new objects only, and whether imported Sounds are selected in Wwise afterwards.
 - **Stream & loop:** **Auto streaming** for Sounds at least a set number of seconds long, and whether Zero latency and Non-cachable come along with streaming. See [Streaming](#streaming). When you've set any choices in the Stream column, **Clear streaming overrides** appears here, and **Clear loop overrides** when you've set any in the Loop column.
@@ -309,18 +312,18 @@ Result: `Pistol` holds three Random Containers (`Muzzle`, `Mech`, `Tail`), each 
 **One container per region.** Regions named `Footstep_Concrete`, `Footstep_Grass`..., several items in each.
 
 - Level 1: Random Container named `$region`.
-- Originals subfolder: `Footsteps\$region`.
+- Originals location: `Footsteps\$region`.
 
 **Voice-over.** Choose **Sound Voice** and the language (or just Browse to a folder in `Originals\Voices\<language>`, which does both), and set the Sound's name to `$region` or leave it as the item name. The files go to `Originals\Voices\<language>`.
 
 ## Troubleshooting
 
-- **Red dot, "Couldn't reach Wwise".** Wwise isn't open, WAAPI is off, or the HTTP port doesn't match. Check the Wwise setup above, then click **Reconnect** in Settings.
+- **Red dot, "Couldn't reach Wwise".** Wwise isn't open, WAAPI is off, or the HTTP port doesn't match. Check the Wwise setup above, then click the refresh button at the top right (or press **F5**).
 - **"Wwise refused the connection (HTTP 404)".** Set **Allow connections from** to `127.0.0.1,::1` in Wwise's User Preferences, make sure the WAMP and HTTP ports are different, and restart Wwise.
 - **"Wwise is busy and didn't answer in time".** Wwise is still loading or working on something. Wait a moment; the preview updates on its own.
 - **Transfer is greyed out.** Hover over the button to see why. Usually nothing is selected in REAPER or in Wwise, or a structure level has no name.
 - **"Save the REAPER project first".** The REAPER project has never been saved, and the transfer needs to render. Save it (**File > Save project**) and transfer again. Items sent as they are (no render) work without saving.
-- **"REAPER didn't render a file for it".** REAPER ran the render but the file for that Sound wasn't where Wwise Tool expected it. Check that the **Keep rendered files in** folder can be written to, and try again.
+- **"REAPER didn't render a file for it".** REAPER ran the render but the file for that Sound wasn't where Wwise Tool expected it. Check that the renders location folder can be written to, and try again.
 - **"A wildcard in the hierarchy didn't resolve to a single name".** A wildcard came out empty for some items, for example `$region` on an item that's outside every region.
 - **Two audio sources with the same name on one Sound.** Older versions could add a second source when you transferred onto an existing Sound. From 1.7.1 the existing source gets the new audio, and the next transfer of that Sound also removes the older duplicate.
 - **A Sound came in stereo but should be mono (or the other way).** Left and right must match within -90 dB for Auto to pick mono, so a stereo effect, a stereo source file or a panned item keeps it stereo. The transfer summary says how much they differ. Click the Sound (or its container) in the preview's **Channels** column and pick Mono.
