@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Jay Sabins Scripts" commit="3b3ea53e2bcb8a4493268fd06d8a313d08b3234c">
+<index version="1" name="Jay Sabins Scripts" commit="16412e4e808d3744769e42153ae03359e9ce15fd">
   <category name="Batch Tools">
     <reapack name="jsabins_Folder_Batch.lua" type="script" desc="Folder Batch Processor">
       <metadata>
@@ -29,6 +29,40 @@ If you've changed Wwise Tool's Settings > Appearance (font, colors, corners), Fo
 uses the same look.
 Renamed from jsabins_Folder_Batch_ImGui.lua.]]></changelog>
         <source main="main">https://github.com/jaysabins/reascripts/raw/951eeeb478745ffa4f0a147cb6934f448324a0dd/Batch%20Tools/jsabins_Folder_Batch.lua</source>
+      </version>
+    </reapack>
+  </category>
+  <category name="Color">
+    <reapack name="jsabins_Color Palette.lua" type="script" desc="Color Palette (color tracks, items, markers and regions from saved palettes)">
+      <metadata>
+        <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 \fmodern Courier;}}
+{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
+\widowctrl\hyphauto
+
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel0 \b \fs36 Color Palette\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 A palette window for coloring tracks, items, and markers and regions. Click a swatch to color what's selected. The target follows where you last clicked in REAPER (track list or items), or pick Tracks, Items or Markers yourself.\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Build palette: tools that make a set of colors (Spectrum, Gradient, Shades, Harmony, Random). Save the result as a palette of your own or add it to one.\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Your palettes: as many as you like, listed on the left. Add the current color or the selection's colors, edit a swatch (Alt+click), drag swatches to reorder them or drag one onto another palette to copy it. Import and export palette files (.txt or GIMP .gpl).\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Recent: the last colors you used.\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Actions: Spread (palette colors in order across the selection), Random, Gradient (from the first selected to the last), Random gradient, Shade children (a folder's children in shades of its color), Lighter, Darker, Default.\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Swatches already used by the selection get a white outline.\sa180\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Shift+click a swatch to spread the palette across the selection starting from it. Right-click a swatch for more.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Requires ReaImGui (ReaPack > ReaTeam Extensions). Same look as Wwise Tool.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Guide: https://github.com/jaysabins/reascripts/blob/main/Color/jsabins_Color_Palette_README.md\par}
+}
+]]></description>
+      </metadata>
+      <version name="1.0.0" author="Jay Sabins" time="2026-11-17T03:55:59Z">
+        <changelog><![CDATA[First release. Click a swatch to color the selected tracks, items, or markers and regions.
+Build palette: spectrum, gradient, shades, color harmony and random tools, saved as your own
+palettes. Your palettes: add, edit, drag to reorder, import and export (including GIMP .gpl).
+Recent row.
+Actions: spread a palette across the selection, random colors, gradient between the first
+and last selected, random gradient, shade a folder's children, lighter, darker, default.
+Optional: color new tracks automatically while the window is open, folder children follow
+their parent, items follow their track, close after coloring.
+Same style as Wwise Tool and GunKit RPM, with its own Appearance settings.]]></changelog>
+        <source main="main">https://github.com/jaysabins/reascripts/raw/16412e4e808d3744769e42153ae03359e9ce15fd/Color/jsabins_Color%20Palette.lua</source>
       </version>
     </reapack>
   </category>
