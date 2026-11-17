@@ -238,11 +238,22 @@ end
 
 M.UNSAVED_MSG = "Save the REAPER project first (File > Save project). Transfers that render audio need a saved project."
 
--- Split the "Keep rendered files in" setting into a real folder and a wildcard part for
+-- The default renders location (Settings > Rendering): the same in every tab and project.
+-- A tab's own "Renders location" (s.render_folder, under Destination) overrides it when set.
+function M.render_default() return r.GetExtState(M.EXT, "render_default") end
+function M.set_render_default(v) r.SetExtState(M.EXT, "render_default", v or "", true) end
+-- The renders folder a setup actually uses: its own, else the default ("" = temporary).
+function M.effective_render_folder(s)
+  local own = (s.render_folder or ""):gsub("^%s+", "")
+  if own ~= "" then return own end
+  return M.render_default()
+end
+
+-- Split the renders folder in use (see effective_render_folder) into a real folder and a wildcard part for
 -- RENDER_PATTERN: "Renders\$project\$region" -> "<project folder>\Renders", "$project/$region".
 -- A relative path is relative to the project folder. Returns nil when renders are temporary.
 function M.render_folder_parts(s)
-  local f = (s.render_folder or ""):gsub("^%s+", ""):gsub("[%s\\/]+$", "")
+  local f = M.effective_render_folder(s):gsub("^%s+", ""):gsub("[%s\\/]+$", "")
   if f == "" then return nil end
   local absolute = f:match("^%a:") or f:match("^[\\/]")
   local segs = {}
@@ -722,6 +733,7 @@ function M.config_text(tabs, view)
     structure_presets = read_table(PRESET_KEYS.structure),
     settings_presets = read_table(PRESET_KEYS.settings),
     view = view,
+    render_default = M.render_default(),
   })
 end
 
@@ -756,7 +768,8 @@ function M.read_config(path)
     return out
   end
   return { tabs = t, structure_presets = presets(c.structure_presets), settings_presets = presets(c.settings_presets),
-    view = type(c.view) == "table" and c.view or nil }
+    view = type(c.view) == "table" and c.view or nil,
+    render_default = type(c.render_default) == "string" and c.render_default or nil }
 end
 
 ----------------------------------------------------------------------
