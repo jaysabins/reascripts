@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Jay Sabins Scripts" commit="1e6fcdc792ee6593633ef79c2ffdd96050837bee">
+<index version="1" name="Jay Sabins Scripts" commit="c2bdc56adbf720a419166c6f765768c1a019f41c">
   <category name="Batch Tools">
     <reapack name="jsabins_Folder_Batch.lua" type="script" desc="Folder Batch Processor">
       <metadata>
@@ -315,7 +315,7 @@ Accent color (gear button) for the Apply button, sliders, checkmarks and volume 
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Import destination: type a Wwise path or grab the Wwise selection.\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Hierarchy mapping: build Wwise containers above each Sound (Actor-Mixers, Random/Sequence/Switch/Blend Containers, Virtual Folders, Work Units) named with REAPER wildcards like $region, $track, $item.\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Property templates per level, Sound SFX or Sound Voice (with language), Originals location (wildcards allowed).\par}
-{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Tabs, each a whole setup you can flick between. Conflict handling, structure and settings presets, export/import of the whole configuration, live preview (new vs existing objects), transfer summary. One Wwise undo step per transfer.\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Tabs, each a whole setup you can flick between, shared by every project (each project keeps its own settings per tab). Conflict handling, structure and settings presets, export/import of the whole configuration, live preview (new vs existing objects), transfer summary. One Wwise undo step per transfer.\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Auto mono/stereo: a Sound whose left and right match is made mono (also for folder items). Click the preview's Channels column to force Mono or Stereo for a Sound or a whole container, or drag/Shift/Ctrl+click to set many rows at once.\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Streaming: turn on Stream per Sound or container from the preview's Stream column, or automatically for Sounds longer than a set length.\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Loop: set Sounds to loop (infinite) from the preview's Loop column.\par}
@@ -798,6 +798,17 @@ Transfer to Wwise follows the Settings > Appearance "Buttons, fields and panels"
         <source main="main">https://github.com/jaysabins/reascripts/raw/1e6fcdc792ee6593633ef79c2ffdd96050837bee/Wwise/jsabins_Wwise%20Tool.lua</source>
         <source main="main" file="jsabins_Wwise Tool - Quick send.lua">https://github.com/jaysabins/reascripts/raw/1e6fcdc792ee6593633ef79c2ffdd96050837bee/Wwise/jsabins_Wwise%20Tool%20-%20Quick%20send.lua</source>
         <source file="jsabins_WwiseTool_core.lua">https://github.com/jaysabins/reascripts/raw/1e6fcdc792ee6593633ef79c2ffdd96050837bee/Wwise/jsabins_WwiseTool_core.lua</source>
+      </version>
+      <version name="1.24.0" author="Jay Sabins" time="2026-11-17T22:14:37Z">
+        <changelog><![CDATA[Tabs are now the same in every project. Adding, closing, renaming, recoloring or
+reordering a tab does it everywhere, and switching projects no longer swaps the tab list.
+Each project still remembers which tab it was on and its own settings in each tab, so a
+project opens the way you left it. A tab you haven't used in a project yet starts with that
+tab's last-edited settings. The first time, tabs from your other projects are added to the
+shared list (matched by name), so none are lost.]]></changelog>
+        <source main="main">https://github.com/jaysabins/reascripts/raw/c2bdc56adbf720a419166c6f765768c1a019f41c/Wwise/jsabins_Wwise%20Tool.lua</source>
+        <source main="main" file="jsabins_Wwise Tool - Quick send.lua">https://github.com/jaysabins/reascripts/raw/c2bdc56adbf720a419166c6f765768c1a019f41c/Wwise/jsabins_Wwise%20Tool%20-%20Quick%20send.lua</source>
+        <source file="jsabins_WwiseTool_core.lua">https://github.com/jaysabins/reascripts/raw/c2bdc56adbf720a419166c6f765768c1a019f41c/Wwise/jsabins_WwiseTool_core.lua</source>
       </version>
     </reapack>
   </category>
