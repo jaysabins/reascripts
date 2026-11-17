@@ -19,7 +19,7 @@ Wwise Tool is a free REAPER script by Jay Sabins, written in Lua with a ReaImGui
 - **Conflict handling.** Choose to reuse, replace or rename objects that already exist.
 - **SFX and Voice.** Import as Sound SFX or as Sound Voice in a chosen language.
 - **Originals location** with wildcards, and a folder picker for your Wwise project's Originals folder (SFX or any Voices language).
-- **Tabs.** Each tab along the top holds a whole setup (structure and settings) and can have its own color, so you can flick between, say, a weapons setup and a footsteps setup with one click.
+- **Tabs.** Each tab along the top holds a whole setup (structure and settings) and can have its own color, so you can flick between, say, a weapons setup and a footsteps setup with one click. The tabs are the same in every project, and each project remembers its own settings in them.
 - **Two kinds of presets.** Structure presets hold just the Wwise structure; settings presets hold everything else. Load one without touching the other.
 - **One undo step.** Each transfer is a single undo in Wwise.
 - **Quick send.** A second action transfers with your last settings, without opening the window. Put it on a shortcut for one-key transfers.
@@ -95,9 +95,11 @@ Under the toolbar is a row of tabs. Each tab is a complete setup: the Wwise stru
 - **+** adds a new tab that starts as a copy of the one showing.
 - **Double-click** a tab to rename it.
 - **Right-click** a tab to edit it: click the color swatch to give the tab its own color, type a new name, or **Close tab**. Underneath, **Reset color** goes back to the normal tab color, **Duplicate** adds a copy next to it, and the **Tab order** arrows move it left or right. New and duplicated tabs keep the color of the tab they were copied from.
-- Close a tab with its **x** (or middle-click it). You're asked first, because its setup goes with it. The last tab can't be closed.
+- Close a tab with its **x** (or middle-click it). You're asked first, because its setup goes with it, in every project. The last tab can't be closed.
 
-Tabs are saved with each REAPER project, and the last-used tabs carry over to new projects, like the rest of the settings. **Quick send** uses the tab that was showing when you last used the window.
+The tabs themselves (names, colors, order, adding and closing) are the same in every REAPER project, so switching projects never makes a tab disappear. What's inside them is remembered per project: each project keeps its own settings in each tab and which tab it was showing, so when you come back to a project it opens the way you left it. A tab you haven't used in a project yet starts with the settings it was last edited with (in any project). **Quick send** uses the tab that was showing when you last used the window in that project.
+
+Updating from a version before 1.24.0: the tabs of the first project you open become the shared list, and tabs from your other projects are added to it as you open them (a tab with the same name as one already there is treated as the same tab).
 
 Presets still work inside a tab: loading a structure or settings preset changes the tab that's showing, and saving a preset saves from it.
 
@@ -114,7 +116,7 @@ The connection port and the Mono/Stereo choices from the preview are never part 
 
 ### Export and import the whole configuration
 
-**Settings > Configuration > Export configuration...** saves everything to one `.json` file: every tab (its structure, settings, name and color), all structure and settings presets, and the window's look (opacity, visible columns, type colors, delay unit), plus the default renders location. **Import configuration...** loads such a file: this project's tabs and the window's look are replaced, presets from the file are added (a preset with the same name is overwritten, your others stay), and your connection port is kept. Use it to back up a setup or move it to another computer.
+**Settings > Configuration > Export configuration...** saves everything to one `.json` file: every tab (its structure, settings, name and color), all structure and settings presets, and the window's look (opacity, visible columns, type colors, delay unit), plus the default renders location. **Import configuration...** loads such a file: the tabs (in every project) and the window's look are replaced, presets from the file are added (a preset with the same name is overwritten, your others stay), and your connection port is kept. Use it to back up a setup or move it to another computer.
 
 Presets from before version 1.11 held the structure plus the Originals subfolder, conflict choice and template option. The first time you open 1.11 or later, each one is split into a structure preset and a settings preset with the same name, so nothing is lost.
 
