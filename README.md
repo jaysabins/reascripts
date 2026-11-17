@@ -26,6 +26,9 @@ https://github.com/jaysabins/reascripts/raw/main/index.xml
 **Batch Tools**
 - **Folder Batch Processor**: batch-renders multi-language VO from a structured project folder (`_Raw` to `_Processed`), with per-language overrides and CSV logging. One screen with render settings on the left and the languages on the right (each with its file count, whether its track was found, and whether it has its own settings), and the same look as Wwise Tool (dark rounded window, Verdana, bold title, flat ? and X buttons; it follows Wwise Tool's Appearance settings too). Requires SWS and ReaImGui. Written with Daniel Petras. Guide: [Folder Batch README](Batch%20Tools/jsabins_Folder_Batch_README.md).
 
+**Color**
+- **Color Palette**: a palette window for coloring tracks, items, and markers and regions. Click a swatch to color the selection; the target follows where you last clicked (track list or items), or pick Tracks, Items or Markers. Comes with a Generated palette (hues and shades you can adjust) and lets you save your own palettes: add the current color or the selection's colors, edit swatches, drag to reorder or copy between palettes, sort by hue, and import or export palette files (.txt or GIMP .gpl). A Recent row keeps your last colors, and swatches already used by the selection get an outline. Actions: Spread a palette across the selection, Random, Gradient from the first selected to the last, Shade a folder's children, Lighter, Darker, Default. Options to color new tracks automatically while it's open, have folder children follow their parent, and close after coloring. Same look as Wwise Tool (follows its Appearance settings). Requires ReaImGui. Guide: [Color Palette README](Color/jsabins_Color_Palette_README.md).
+
 **FX**
 - **Screenshot track FX chain to Docs folder**: saves a PNG of every plugin on the selected track, numbered in chain order, into `Docs\<Track name>` in the project folder. Requires js_ReaScriptAPI.
 
