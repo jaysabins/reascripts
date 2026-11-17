@@ -1,26 +1,13 @@
 -- @description Wwise Tool (send REAPER audio to Wwise)
 -- @author Jay Sabins
--- @version 1.23.0
+-- @version 1.24.0
 -- @changelog
---   New refresh button at the top right (left of ?), also on F5 while the window is focused:
---   reconnects to Wwise and re-reads everything the window knows about it (project, languages,
---   what already exists, the Wwise selection) to pick up changes made in Wwise.
---   "From Wwise" next to the destination is now an icon button (an arrow into a circle), in the
---   same flat style as the title-bar buttons, so the destination field is wider.
---   Drag the edge between the left panel and the preview to make the panel wider or narrower.
---   The width is remembered; double-click the edge to go back to the default.
---   The connected dot is the same green as Transfer to Wwise.
---   "Wwise destination" is now just "Destination", and "Originals subfolder" is now
---   "Originals location". Its $ button is flat like the Wwise structure ones, and Browse is a
---   flat folder icon.
---   Every field and dropdown under Source and Destination has the same width.
---   Checkbox ticks are white again (the text color) instead of the tab color.
---   New "Renders location" under Destination: where this tab keeps rendered files, overriding
---   the default. Settings > Rendering now holds the default renders location (same for every
---   tab and project); leave the Destination field empty to use it.
---   Buttons, fields and panels are rounder by default (8px instead of 3px). If you never
---   changed that setting, you get the new default.
---   Transfer to Wwise follows the Settings > Appearance "Buttons, fields and panels" slider.
+--   Tabs are now the same in every project. Adding, closing, renaming, recoloring or
+--   reordering a tab does it everywhere, and switching projects no longer swaps the tab list.
+--   Each project still remembers which tab it was on and its own settings in each tab, so a
+--   project opens the way you left it. A tab you haven't used in a project yet starts with that
+--   tab's last-edited settings. The first time, tabs from your other projects are added to the
+--   shared list (matched by name), so none are lost.
 -- @provides
 --   [main] jsabins_Wwise Tool - Quick send.lua
 --   [nomain] jsabins_WwiseTool_core.lua
@@ -38,7 +25,7 @@
 --     Work Units) named with REAPER wildcards like $region, $track, $item.
 --   - Property templates per level, Sound SFX or Sound Voice (with language),
 --     Originals location (wildcards allowed).
---   - Tabs, each a whole setup you can flick between. Conflict handling, structure and settings presets, export/import of the whole configuration, live preview (new vs existing objects),
+--   - Tabs, each a whole setup you can flick between, shared by every project (each project keeps its own settings per tab). Conflict handling, structure and settings presets, export/import of the whole configuration, live preview (new vs existing objects),
 --     transfer summary. One Wwise undo step per transfer.
 --   - Auto mono/stereo: a Sound whose left and right match is made mono
 --     (also for folder items). Click the preview's Channels column to force
@@ -2552,7 +2539,8 @@ end
 
 -- Add a copy of tab `from` at position `at` and show it.
 local function add_tab(from, at, name)
-  local tab = { id = tabs.next_id, name = name, color = tabs.list[from].color, s = core.copy_settings(tabs.list[from].s) }
+  local tab = { id = tabs.next_id, uid = core.new_tab_uid(tabs.list), name = name, color = tabs.list[from].color,
+                s = core.copy_settings(tabs.list[from].s) }
   tabs.next_id = tabs.next_id + 1
   table.insert(tabs.list, at, tab)
   if at <= tabs.active then tabs.active = tabs.active + 1 end
@@ -2710,6 +2698,7 @@ local function section_tabs()
     if not tab then ImGui.CloseCurrentPopup(ctx)
     else
       ImGui.Text(ctx, "Close \"" .. tab.name .. "\"?")
+      ImGui.TextColored(ctx, COLOR_DIM, "Tabs are shared by every project, so it closes in all of them.")
       ImGui.TextColored(ctx, COLOR_DIM, "Its structure and settings go with it. Save them as presets first to keep them.")
       if ImGui.Button(ctx, "Close tab", 120) or ImGui.IsKeyPressed(ctx, ImGui.Key_Enter) then
         close_tab(tab_close); tab_close = nil; ImGui.CloseCurrentPopup(ctx)

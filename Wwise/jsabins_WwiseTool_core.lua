@@ -350,37 +350,118 @@ function M.save_settings(s, proj)
 end
 
 -- Tabs: each tab holds a whole setup (structure and every setting), so you can flick
--- between setups. Saved like the settings: in the project, and as the default for
--- projects that don't have their own tabs yet. The active tab's setup is also the
--- project's "settings", so Quick send always uses the tab that was showing.
---   { active = n, list = { { id = n, name = "...", color = 0xRRGGBB or nil, s = <settings> }, ... } }
+-- between setups. Since 1.24.0 the tab list is the same in every project: names, colors,
+-- order, adding and closing are saved globally (ExtState "tab_list"). Each project keeps its
+-- own copy of each tab's settings and which tab it was showing (ProjExtState "tabs"), so a
+-- project opens with the setups you used in it. A tab a project hasn't used yet starts from
+-- that tab's last-edited settings. The active tab's setup is also the project's "settings",
+-- so Quick send always uses the tab that was showing.
+--   { active = n, list = { { id = n, uid = "...", name = "...", color = 0xRRGGBB or nil, s = <settings> }, ... } }
+-- `uid` never changes and ties a project's settings to a tab; `id` is only for ImGui.
+function M.new_tab_uid(list)
+  local used = {}
+  for _, tab in ipairs(list or {}) do if tab.uid then used[tab.uid] = true end end
+  local uid
+  repeat uid = string.format("t%x%04x", os.time(), math.random(0, 0xFFFF)) until not used[uid]
+  return uid
+end
+
 local function read_tabs_text(txt)
-  if txt == "" then return nil end
+  if txt == nil or txt == "" then return nil end
   local ok, t = pcall(json.decode, txt)
   if not ok or type(t) ~= "table" or type(t.list) ~= "table" then return nil end
   local list = {}
   for _, tab in ipairs(t.list) do
     if type(tab) == "table" and type(tab.s) == "table" then
       local color = type(tab.color) == "number" and (math.floor(tab.color) & 0xFFFFFF) or nil
-      list[#list + 1] = { name = tostring(tab.name or ""), color = color, s = merge_defaults(tab.s) }
+      local uid = type(tab.uid) == "string" and tab.uid ~= "" and tab.uid or nil
+      list[#list + 1] = { uid = uid, name = tostring(tab.name or ""), color = color, s = merge_defaults(tab.s) }
     end
   end
   if #list == 0 then return nil end
   local active = math.floor(tonumber(t.active) or 1)
-  return { active = math.max(1, math.min(#list, active)), list = list }
+  return { active = math.max(1, math.min(#list, active)), active_uid = type(t.active_uid) == "string" and t.active_uid or nil,
+           list = list }
+end
+
+-- Give every tab a uid (tabs saved before 1.24.0 have none) and drop repeated uids.
+local function fill_uids(t)
+  local seen = {}
+  for _, tab in ipairs(t.list) do
+    if not tab.uid or seen[tab.uid] then tab.uid = M.new_tab_uid(t.list) end
+    seen[tab.uid] = true
+  end
+end
+
+local function global_tabs_text(t, active_uid)
+  local list = {}
+  for i, tab in ipairs(t.list) do list[i] = { uid = tab.uid, name = tab.name, color = tab.color, s = tab.s } end
+  return json.encode({ active_uid = active_uid, list = list })
+end
+
+-- The tab list shared by every project, or nil if there isn't one yet.
+function M.load_global_tabs()
+  local g = read_tabs_text(r.GetExtState(M.EXT, "tab_list"))
+  if g then fill_uids(g); return g end
+  -- First run of 1.24.0: start from the last project's tabs.
+  g = read_tabs_text(r.GetExtState(M.EXT, "last_tabs"))
+  if g then
+    fill_uids(g)
+    g.active_uid = g.list[g.active].uid
+    r.SetExtState(M.EXT, "tab_list", global_tabs_text(g, g.active_uid), true)
+  end
+  return g
 end
 
 function M.load_tabs()
   local _, txt = r.GetProjExtState(0, M.EXT, "tabs")
-  local t = read_tabs_text(txt) or read_tabs_text(r.GetExtState(M.EXT, "last_tabs"))
+  local p = read_tabs_text(txt)
+  local g = M.load_global_tabs()
   local s = M.load_settings()
-  if not t then
-    t = { active = 1, list = { { name = "Default", s = s } } }
+  local t
+  if not g and not p then
+    t = { active = 1, list = { { uid = M.new_tab_uid(), name = "Default", s = s } } }
+    g = { list = { { uid = t.list[1].uid, name = "Default", s = M.copy_settings(s) } } }
+    r.SetExtState(M.EXT, "tab_list", global_tabs_text(g, t.list[1].uid), true)
   else
+    g = g or { list = {} }
+    local active_uid = p and p.active_uid or g.active_uid
+    local mine = {}
+    if p then
+      -- A project saved before 1.24.0 has its own tab list without uids: match its tabs to
+      -- the shared ones by name, and add any the shared list doesn't have yet, so no tab is lost.
+      local by_name, by_uid, added = {}, {}, false
+      for _, tab in ipairs(g.list) do by_name[tab.name:lower()] = tab; by_uid[tab.uid] = tab end
+      for i, tab in ipairs(p.list) do
+        local match = tab.uid and by_uid[tab.uid] or (not tab.uid and by_name[tab.name:lower()])
+        if not tab.uid and not match then
+          tab.uid = M.new_tab_uid(g.list)
+          match = { uid = tab.uid, name = tab.name, color = tab.color, s = M.copy_settings(tab.s) }
+          g.list[#g.list + 1] = match
+          by_name[tab.name:lower()], by_uid[tab.uid] = match, match
+          added = true
+        end
+        if match then
+          if not mine[match.uid] then mine[match.uid] = tab.s end
+          if not p.active_uid and i == p.active then active_uid = match.uid end
+        end
+      end
+      if added then r.SetExtState(M.EXT, "tab_list", global_tabs_text(g, g.active_uid), true) end
+    end
+    if #g.list == 0 then
+      g.list[1] = { uid = M.new_tab_uid(), name = "Default", s = M.copy_settings(s) }
+    end
+    t = { active = 1, list = {} }
+    for i, tab in ipairs(g.list) do
+      t.list[i] = { uid = tab.uid, name = tab.name, color = tab.color, s = mine[tab.uid] or M.copy_settings(tab.s),
+                    used = mine[tab.uid] ~= nil }
+      if tab.uid == active_uid then t.active = i end
+    end
     -- The project's own settings win for the active tab (an older version or another
     -- script may have changed them since the tabs were saved).
     t.list[t.active].s = s
   end
+  t.list[t.active].used = true
   for i, tab in ipairs(t.list) do
     tab.id = i
     if tab.name == "" then tab.name = "Tab " .. i end
@@ -389,14 +470,39 @@ function M.load_tabs()
   return t
 end
 
+-- A tab is "used" in a project once it has been showing there; only those tabs' settings are
+-- kept in the project, so the others keep following their last-edited settings.
+-- Saves this project's copy (its settings for each used tab and the showing tab) and the shared
+-- tab list. In the shared list only the showing tab's settings are updated (that's the one
+-- being edited); other tabs keep their last-edited settings from whichever project.
 function M.save_tabs(t, proj)
   proj = proj or 0
-  local list = {}
-  for i, tab in ipairs(t.list) do list[i] = { name = tab.name, color = tab.color, s = tab.s } end
-  local txt = json.encode({ active = t.active, list = list })
+  fill_uids(t)
+  local active_uid = t.list[t.active] and t.list[t.active].uid
+  if t.list[t.active] then t.list[t.active].used = true end
+  local list, all, active = {}, {}, 1
+  for i, tab in ipairs(t.list) do
+    all[i] = { uid = tab.uid, name = tab.name, color = tab.color, s = tab.s }
+    if tab.used then
+      list[#list + 1] = all[i]
+      if i == t.active then active = #list end
+    end
+  end
+  local txt = json.encode({ active = active, active_uid = active_uid, list = list })
   local _, old = r.GetProjExtState(proj, M.EXT, "tabs")
   if old ~= txt then r.SetProjExtState(proj, M.EXT, "tabs", txt) end
-  r.SetExtState(M.EXT, "last_tabs", txt, true)
+  -- What versions before 1.24.0 read as the default for new projects.
+  r.SetExtState(M.EXT, "last_tabs", json.encode({ active = t.active, list = all }), true)
+  local g = read_tabs_text(r.GetExtState(M.EXT, "tab_list"))
+  local prev = {}
+  if g then for _, tab in ipairs(g.list) do if tab.uid then prev[tab.uid] = tab.s end end end
+  local shared = { list = {} }
+  for i, tab in ipairs(t.list) do
+    local s = (tab.uid == active_uid or not prev[tab.uid]) and tab.s or prev[tab.uid]
+    shared.list[i] = { uid = tab.uid, name = tab.name, color = tab.color, s = s }
+  end
+  local gtxt = global_tabs_text(shared, active_uid)
+  if gtxt ~= r.GetExtState(M.EXT, "tab_list") then r.SetExtState(M.EXT, "tab_list", gtxt, true) end
 end
 
 function M.copy_settings(s) return merge_defaults(json.decode(json.encode(s))) end
@@ -757,6 +863,7 @@ function M.read_config(path)
   end
   local t = type(c.tabs) == "table" and read_tabs_text(json.encode(c.tabs)) or nil
   if not t then return nil, "That configuration has no tabs in it." end
+  fill_uids(t)
   for i, tab in ipairs(t.list) do
     tab.id = i
     if tab.name == "" then tab.name = "Tab " .. i end
