@@ -151,11 +151,11 @@ The Sound's name comes from the item's take name (or the rendered file's name in
 
 This sets the containers that are created above each Sound, from the top down:
 
-- Click a row's **+** to add a level right below it (the **+** on the Sound row adds one just above the Sound), then choose its type: Actor-Mixer, Random Container, Sequence Container, Switch Container, Blend Container, Virtual Folder, Work Unit or Physical Folder.
+- Click **+ Add level** under the rows to add a level just above the Sound (drag it by its handle to move it), then choose its type: Actor-Mixer, Random Container, Sequence Container, Switch Container, Blend Container, Virtual Folder, Work Unit or Physical Folder.
 - Name each level. Names can use REAPER wildcards, and the **$** button inserts one. Every item gets its own name from the wildcard, so `$region` puts each item in a container named after its region.
 - The last row is the **Sound** itself. Choose **Sound SFX** or **Sound Voice** (pick a language for Voice). In Wwise 2025.1 and later both are simply called Sound. Leave its name empty to use the item's name.
-- Each row's type dropdown shows a colored dot and the type name in its color, the same color its tag uses in the preview. The **$**, template and **+** / **-** buttons stay faint until you point at the row. Colors: orange for Random Containers, purple for Blend Containers, blue for Sounds, and so on. You can pick your own colors in **Settings > Interface > Type colors**.
-- Click a row's **-** to remove that level. The **+** and **-** buttons sit on each row, so you always see which level they act on.
+- Each row's type shows its full name in its color, the same color its tag uses in the preview; click it to pick another type. The **$** and template buttons sit inside the end of the name field and stay faint until you point at the row. Colors: orange for Random Containers, purple for Blend Containers, blue for Sounds, and so on. You can pick your own colors in **Settings > Interface > Type colors**.
+- Point at a row and click the small **x** at its end to remove that level.
 - To move a level, drag the handle (three lines) at the left of its row onto another level.
 - Each row's clipboard button holds its property template. The clipboard is dim when no template is set and turns amber when one is. See [Property templates](#property-templates).
 - **Structure presets** (the layers icon at the right end of the section's title line) saves just the structure (the levels with their names and templates, and the Sound row with its type, name, template and language) under a name, and loads or deletes saved ones. Loading one changes only the structure. See [Presets](#presets).

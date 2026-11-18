@@ -10,8 +10,10 @@
 --   Drag a tab left or right to change the tab order (the right-click arrows still work).
 --   Structure presets moved from the button under the rows to a flat layers icon at the end of
 --   the "Wwise structure" title line (same Load / Save popup).
---   The Wwise structure type column is as wide as the longest type name, so names like
---   "Property Container" are no longer cut off.
+--   Wwise structure rows have more room for names: the type shows as its full name in its
+--   color (no dot or arrow box) in a column as wide as the longest name; $ and the property
+--   template button sit inside the end of the name field; a small x on the hovered row removes
+--   a level, and "+ Add level" under the rows adds one (drag a level by its handle to move it).
 --   Settings: the Close button at the bottom is gone (use the X or Esc). Clicking the gear
 --   while Settings is open brings the Settings window to the front.
 --   Quick send uses the shared tab's latest settings.
@@ -444,8 +446,8 @@ local function input(label, value, hint, width)
   return v
 end
 
-local function wildcard_menu(id, apply, ghost, size)
-  ImGui.SameLine(ctx)
+local function wildcard_menu(id, apply, ghost, size, tight)
+  if tight then ImGui.SameLine(ctx, 0, 0) else ImGui.SameLine(ctx) end
   local gn = UI.ghost_push(ghost)
   if ImGui.Button(ctx, "$##wc" .. id, size or 0, size or 0) then ImGui.OpenPopup(ctx, "wcpop" .. id) end
   if gn > 0 then ImGui.PopStyleColor(ctx, gn) end
@@ -1151,23 +1153,6 @@ local function grip_handle(id, w, h)
   end
 end
 
--- Square + / - button with the symbol drawn bigger than the font's "+" and "-".
-local function pm_button(id, plus, size, ghost)
-  local gn = UI.ghost_push(ghost)
-  local pressed = ImGui.Button(ctx, id, size, size)
-  if gn > 0 then ImGui.PopStyleColor(ctx, gn) end
-  local x1, y1 = ImGui.GetItemRectMin(ctx)
-  local dl = ImGui.GetWindowDrawList(ctx)
-  local col = ghost and 0x8A8A8AFF or ImGui.GetColor(ctx, ImGui.Col_Text)
-  -- 2px lines on whole pixels (ImGui adds half a pixel to lines, so take it back off).
-  local c = math.floor(size / 2 + 0.5)
-  local cx, cy = math.floor(x1 + 0.5) + c - 0.5, math.floor(y1 + 0.5) + c - 0.5
-  local h = math.floor(size * 0.20 + 0.5)
-  ImGui.DrawList_AddLine(dl, cx - h, cy, cx + h, cy, col, 2)
-  if plus then ImGui.DrawList_AddLine(dl, cx, cy - h, cx, cy + h, col, 2) end
-  return pressed
-end
-
 local function new_level(at)
   table.insert(S.rows, at, { type = #S.rows == 0 and "Actor-Mixer" or "Random Container", name = "", template = "" })
   settings_changed()
@@ -1196,15 +1181,16 @@ end
 
 -- Wwise structure type dropdown: grey frame with a colored dot and the type name in its color
 -- drawn over it (the combo's own preview is left empty). Each choice in the list is in its color.
--- Width of a type dropdown that fits the longest name in `labels` (dot, name and arrow box),
--- so no type name is cut off.
+-- The type shows as its full name in its color: no dot, and no arrow box when this ReaImGui
+-- has ComboFlags_NoArrowButton (click the name for the list).
+UI.TYPE_COMBO_FLAGS = UI.flag("ComboFlags_NoArrowButton")
+UI.type_arrow_w = function() return UI.TYPE_COMBO_FLAGS ~= 0 and 0 or ImGui.GetFrameHeight(ctx) end
+-- Width of a type dropdown that fits the longest name in `labels`, so no type name is cut off.
 UI.type_combo_w = function(labels)
-  local h = ImGui.GetFrameHeight(ctx)
   local pad_x = ImGui.GetStyleVar(ctx, ImGui.StyleVar_FramePadding)
-  local r = math.max(2.5, math.floor(h * 0.17 + 0.5))
   local tw = 0
   for _, l in ipairs(labels) do tw = math.max(tw, (ImGui.CalcTextSize(ctx, l))) end
-  return math.floor(pad_x * 2 + r * 2 + 5 + tw + h + 0.5)
+  return math.floor(pad_x * 2 + tw + 2 + UI.type_arrow_w() + 0.5)
 end
 UI.type_combo = function(id, items, value, w, color_of)
   local x, y = ImGui.GetCursorScreenPos(ctx)
@@ -1213,7 +1199,7 @@ UI.type_combo = function(id, items, value, w, color_of)
   for _, it in ipairs(items) do if it[1] == value then label = it[2] end end
   local changed, new = false, value
   ImGui.SetNextItemWidth(ctx, w)
-  if ImGui.BeginCombo(ctx, id, "") then
+  if ImGui.BeginCombo(ctx, id, "", UI.TYPE_COMBO_FLAGS) then
     for _, it in ipairs(items) do
       local ic = color_of(it[1])
       if ic then ImGui.PushStyleColor(ctx, ImGui.Col_Text, ic) end
@@ -1225,15 +1211,59 @@ UI.type_combo = function(id, items, value, w, color_of)
   local dl = ImGui.GetWindowDrawList(ctx)
   local pad_x = ImGui.GetStyleVar(ctx, ImGui.StyleVar_FramePadding)
   local col = color_of(new) or ImGui.GetColor(ctx, ImGui.Col_Text)
-  local r = math.max(2.5, math.floor(h * 0.17 + 0.5))
-  local cx, cy = x + pad_x + r, y + h / 2
-  ImGui.DrawList_AddCircleFilled(dl, cx, cy, r, col)
   for _, it in ipairs(items) do if it[1] == new then label = it[2] end end
   local _, th = ImGui.CalcTextSize(ctx, label)
-  ImGui.DrawList_PushClipRect(dl, x, y, x + w - h, y + h, true)
-  ImGui.DrawList_AddText(dl, cx + r + 5, y + (h - th) / 2, col, label)
+  ImGui.DrawList_PushClipRect(dl, x, y, x + w - UI.type_arrow_w(), y + h, true)
+  ImGui.DrawList_AddText(dl, x + pad_x, y + (h - th) / 2, col, label)
   ImGui.DrawList_PopClipRect(dl)
   return changed, new
+end
+
+-- Name field with the $ (wildcards) and template buttons inside its right end: one rounded
+-- field shape is painted first, the text input (no frame of its own) and the two flat buttons
+-- go on top of it side by side, so nothing overlaps.
+UI.name_field = function(id, hint, value, w, ghost, wc_id, apply_wc, get_t, set_t)
+  local sq = ImGui.GetFrameHeight(ctx)
+  local x, y = ImGui.GetCursorScreenPos(ctx)
+  local mx, my = ImGui.GetMousePos(ctx)
+  local over = mx >= x and mx < x + w and my >= y and my < y + sq
+  local dl = ImGui.GetWindowDrawList(ctx)
+  ImGui.DrawList_AddRectFilled(dl, x, y, x + w, y + sq,
+    ImGui.GetColor(ctx, over and ImGui.Col_FrameBgHovered or ImGui.Col_FrameBg), UI.FRAME_ROUNDING)
+  ImGui.PushStyleColor(ctx, ImGui.Col_FrameBg, 0x00000000)
+  ImGui.PushStyleColor(ctx, ImGui.Col_FrameBgHovered, 0x00000000)
+  ImGui.PushStyleColor(ctx, ImGui.Col_FrameBgActive, 0x00000000)
+  ImGui.SetNextItemWidth(ctx, math.max(20, w - sq * 2))
+  local ch, v = ImGui.InputTextWithHint(ctx, id, hint, value or "")
+  ImGui.PopStyleColor(ctx, 3)
+  local after = ImGui.IsItemActive(ctx) -- typing: keep the buttons lit
+  ImGui.PushStyleColor(ctx, ImGui.Col_Button, 0x00000000)
+  ImGui.PushStyleColor(ctx, ImGui.Col_ButtonHovered, 0xFFFFFF18)
+  ImGui.PushStyleColor(ctx, ImGui.Col_ButtonActive, 0xFFFFFF28)
+  local faint = ghost and not after
+  if faint then ImGui.PushStyleColor(ctx, ImGui.Col_Text, 0x8A8A8AFF) end
+  wildcard_menu(wc_id, apply_wc, false, sq, true)
+  ImGui.SameLine(ctx, 0, 0)
+  level_options(wc_id, get_t, set_t, sq, false)
+  if faint then ImGui.PopStyleColor(ctx) end
+  ImGui.PopStyleColor(ctx, 3)
+  return ch, v
+end
+
+-- Small x to remove a level: only drawn while its row is hovered (the space stays).
+UI.remove_button = function(id, size, ghost)
+  local pressed = ImGui.InvisibleButton(ctx, id, size, size)
+  if not ghost or ImGui.IsItemHovered(ctx) then
+    local x1, y1 = ImGui.GetItemRectMin(ctx)
+    local hov = ImGui.IsItemHovered(ctx)
+    local dl = ImGui.GetWindowDrawList(ctx)
+    if hov then ImGui.DrawList_AddRectFilled(dl, x1, y1, x1 + size, y1 + size, 0x8E2A2AFF, UI.FRAME_ROUNDING) end
+    local c, h = size / 2, math.floor(size * 0.17 + 0.5)
+    local col = hov and 0xFFFFFFFF or 0xC86464FF
+    ImGui.DrawList_AddLine(dl, x1 + c - h, y1 + c - h, x1 + c + h, y1 + c + h, col, 1.6)
+    ImGui.DrawList_AddLine(dl, x1 + c + h, y1 + c - h, x1 + c - h, y1 + c + h, col, 1.6)
+  end
+  return pressed
 end
 
 local function section_hierarchy()
@@ -1264,8 +1294,9 @@ local function section_hierarchy()
   dim_label("Levels created under the destination, top to bottom. Names can use wildcards.")
   ImGui.PopTextWrapPos(ctx)
 
-  -- "Quiet rows": no table lines or header. Grey fields; each level's type is a colored dot and
-  -- colored name in its dropdown. $, template and +/- are faint until the row is hovered.
+  -- "Quiet rows": no table lines or header. Grey fields; each level's type is its full name in
+  -- its color. $ and template sit inside the name field (faint until the row is hovered), a
+  -- small x removes the hovered level, and "+ Add level" under the rows adds one.
   local sq = ImGui.GetFrameHeight(ctx)
   local sp = ImGui.GetStyleVar(ctx, ImGui.StyleVar_ItemSpacing)
   local act = {}
@@ -1273,7 +1304,7 @@ local function section_hierarchy()
   local type_labels = { "Sound SFX", "Sound Voice" }
   for _, t in ipairs(core.CONTAINER_TYPES) do type_labels[#type_labels + 1] = core.type_label(t) end
   local type_w = UI.type_combo_w(type_labels)
-  local name_w = math.max(60, avail - 12 - type_w - sq * 4 - UI.PM_GAP - sp * 5)
+  local name_w = math.max(60, avail - 12 - type_w - sq - sp * 3) -- grip, type, name (+$, template), x
   local hover_next = nil
   local mx, my = ImGui.GetMousePos(ctx)
   local win_hovered = ImGui.IsWindowHovered(ctx, ImGui.HoveredFlags_AllowWhenBlockedByActiveItem or 0)
@@ -1308,18 +1339,13 @@ local function section_hierarchy()
     if c then settings_changed() end
     level_drop_target(i, act)
     ImGui.SameLine(ctx)
-    ImGui.SetNextItemWidth(ctx, name_w)
-    local ch, v = ImGui.InputTextWithHint(ctx, "##name", "e.g. $region", row.name or "")
+    local ch, v = UI.name_field("##name", "e.g. $region", row.name, name_w, ghost, "r" .. i,
+      function(w) row.name = (row.name or "") .. w end,
+      function() return row.template end, function(t) row.template = t end)
     if ch then row.name = v; settings_changed() end
     level_drop_target(i, act)
-    wildcard_menu("r" .. i, function(w) row.name = (row.name or "") .. w end, ghost, sq)
     ImGui.SameLine(ctx)
-    level_options("r" .. i, function() return row.template end, function(t) row.template = t end, sq, ghost)
-    ImGui.SameLine(ctx)
-    if pm_button("##add", true, sq, ghost) then act.add = i + 1 end
-    if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Add level below this one") end
-    ImGui.SameLine(ctx, 0, UI.PM_GAP)
-    if pm_button("##rem", false, sq, ghost) then act.remove = i end
+    if UI.remove_button("##rem", sq, ghost) then act.remove = i end
     if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Remove this level") end
     ImGui.PopID(ctx)
   end
@@ -1337,18 +1363,25 @@ local function section_hierarchy()
     if S.leaf.voice and S.leaf.language == "" and conn and conn.languages[1] then S.leaf.language = conn.languages[1] end
   end
   ImGui.SameLine(ctx)
-  ImGui.SetNextItemWidth(ctx, name_w)
-  local ch, v = ImGui.InputTextWithHint(ctx, "##leafname", S.source ~= "render" and "(item name)" or "(rendered file name)", S.leaf.name)
+  local ch, v = UI.name_field("##leafname", S.source ~= "render" and "(item name)" or "(rendered file name)",
+    S.leaf.name, name_w, ghost, "leaf", function(w) S.leaf.name = S.leaf.name .. w end,
+    function() return S.leaf.template end, function(t) S.leaf.template = t end)
   if ch then S.leaf.name = v; settings_changed() end
-  wildcard_menu("leaf", function(w) S.leaf.name = S.leaf.name .. w end, ghost, sq)
-  ImGui.SameLine(ctx)
-  level_options("leaf", function() return S.leaf.template end, function(t) S.leaf.template = t end, sq, ghost)
-  ImGui.SameLine(ctx)
-  if pm_button("##add", true, sq, ghost) then act.add = #S.rows + 1 end
-  if ImGui.IsItemHovered(ctx) then
-    ImGui.SetTooltip(ctx, #S.rows == 0 and "Add level above the Sound" or "Add level just above the Sound")
-  end
   ImGui.PopID(ctx)
+  -- "+ Add level": a quiet text button under the rows; the new level goes just above the Sound
+  -- (drag it by its handle to move it).
+  ImGui.Dummy(ctx, 12, 0)
+  ImGui.SameLine(ctx)
+  ImGui.PushStyleColor(ctx, ImGui.Col_Button, 0x00000000)
+  ImGui.PushStyleColor(ctx, ImGui.Col_ButtonHovered, 0xFFFFFF14)
+  ImGui.PushStyleColor(ctx, ImGui.Col_ButtonActive, 0xFFFFFF24)
+  ImGui.PushStyleColor(ctx, ImGui.Col_Text, 0x9A9A9AFF)
+  if ImGui.Button(ctx, "+ Add level##addlevel") then act.add = #S.rows + 1 end
+  ImGui.PopStyleColor(ctx, 4)
+  if ImGui.IsItemHovered(ctx) then
+    ImGui.SetTooltip(ctx, #S.rows == 0 and "Add a level above the Sound" or
+      "Add a level just above the Sound.\nDrag a level by its handle to move it.")
+  end
   UI.map_hover = hover_next
 
   if act.remove then table.remove(S.rows, act.remove); settings_changed()
