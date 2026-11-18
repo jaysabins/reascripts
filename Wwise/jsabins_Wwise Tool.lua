@@ -7,6 +7,7 @@
 --   project opens with Default the way you left it there. A new project's Default starts from
 --   the last Default you used. Each project still opens on the tab it was showing.
 --   Default can't be closed or moved; the other tabs can.
+--   Drag a tab left or right to change the tab order (the right-click arrows still work).
 --   Quick send uses the shared tab's latest settings.
 --   Coming from 1.24.0: a tab named Default becomes the project tab; if there isn't one, a
 --   Default tab is added with the setup each project was last using.
@@ -2510,6 +2511,7 @@ apply_imported_config = function(cfg)
   end
   if cfg.render_default then core.set_render_default(cfg.render_default) end
   tabs = cfg.tabs
+  UI.renew_tab_ids()
   for _, tab in ipairs(tabs.list) do tab.s.http_port = port end
   S = tabs.list[tabs.active].s
   core.http_port = S.http_port
@@ -2526,6 +2528,34 @@ local function show_tab(i)
   S.http_port = port
   tab_select_pending = true
   setup_switched()
+  settings_changed()
+end
+
+-- Tabs can be dragged to reorder them (ImGui's reorderable tab bar). ImGui keeps its own order
+-- for tab ids it has seen, so whenever we change the order ourselves (add, arrows, project switch,
+-- import) every tab gets a fresh id and ImGui lays them out in our order again. After a drag,
+-- our list is sorted to match where ImGui drew the tabs (UI.tab_x). Default always stays first.
+UI.flag = function(name)
+  local ok, v = pcall(function() return ImGui[name] end)
+  return ok and type(v) == "number" and v or 0
+end
+UI.tab_id_seq = 1000
+UI.renew_tab_ids = function()
+  for _, t in ipairs(tabs.list) do UI.tab_id_seq = UI.tab_id_seq + 1; t.id = UI.tab_id_seq end
+  UI.tab_x, UI.tab_sync = {}, nil
+end
+UI.sync_tab_order = function()
+  local x = UI.tab_x or {}
+  for i = 2, #tabs.list do if not x[tabs.list[i].id] then return end end
+  local rest = {}
+  for i = 2, #tabs.list do rest[#rest + 1] = tabs.list[i] end
+  table.sort(rest, function(a, b) return x[a.id] < x[b.id] end)
+  local changed = false
+  for k, t in ipairs(rest) do if tabs.list[k + 1] ~= t then changed = true end end
+  if not changed then return end
+  local showing = tabs.list[tabs.active]
+  for k, t in ipairs(rest) do tabs.list[k + 1] = t end
+  for k, t in ipairs(tabs.list) do if t == showing then tabs.active = k end end
   settings_changed()
 end
 
@@ -2546,6 +2576,7 @@ local function add_tab(from, at, name)
   tabs.next_id = tabs.next_id + 1
   table.insert(tabs.list, at, tab)
   if at <= tabs.active then tabs.active = tabs.active + 1 end
+  UI.renew_tab_ids()
   show_tab(at)
 end
 
@@ -2567,23 +2598,28 @@ local function move_tab(i, d)
   tabs.list[i], tabs.list[j] = tabs.list[j], tabs.list[i]
   if tabs.active == i then tabs.active = j elseif tabs.active == j then tabs.active = i end
   -- ImGui keeps a tab bar's order once tabs exist; new ids make it lay them out again in our order.
-  for _, k in ipairs({ i, j }) do tabs.list[k].id = tabs.next_id; tabs.next_id = tabs.next_id + 1 end
+  UI.renew_tab_ids()
   tab_select_pending = true
   settings_changed()
 end
 
 local function section_tabs()
   local action
-  if ImGui.BeginTabBar(ctx, "setups", ImGui.TabBarFlags_FittingPolicyScroll) then
+  if ImGui.BeginTabBar(ctx, "setups", ImGui.TabBarFlags_FittingPolicyScroll | UI.flag("TabBarFlags_Reorderable")) then
+    local dragging = false
+    UI.tab_x = UI.tab_x or {}
     for i, tab in ipairs(tabs.list) do
       local can_close = i > 1 -- Default (always first) belongs to the project and stays
       local flags = (tab_select_pending and i == tabs.active) and ImGui.TabItemFlags_SetSelected or ImGui.TabItemFlags_None
+      if i == 1 then flags = flags | UI.flag("TabItemFlags_Leading") end -- can't be dragged, others can't pass it
       local label = tab.name .. "###tab" .. tab.id
       local sel, keep
       local pushed = push_tab_color(tab.color)
       if can_close then sel, keep = ImGui.BeginTabItem(ctx, label, true, flags)
       else sel = ImGui.BeginTabItem(ctx, label, nil, flags) end
       if pushed > 0 then ImGui.PopStyleColor(ctx, pushed) end
+      UI.tab_x[tab.id] = ImGui.GetItemRectMin(ctx)
+      if ImGui.IsItemActive(ctx) and ImGui.IsMouseDown(ctx, ImGui.MouseButton_Left) then dragging = true end
       if can_close and keep == false then action = { "close", i } end
       if ImGui.IsItemHovered(ctx) then
         if ImGui.IsMouseDoubleClicked(ctx, ImGui.MouseButton_Left) then action = { "rename", i }
@@ -2597,12 +2633,18 @@ local function section_tabs()
         ImGui.EndTabItem(ctx)
       end
     end
+    -- A couple of frames after a drag ends, take ImGui's new order into our list.
+    if dragging then UI.tab_sync = 2
+    elseif UI.tab_sync and not ImGui.IsMouseDown(ctx, ImGui.MouseButton_Left) then
+      UI.tab_sync = UI.tab_sync - 1
+      if UI.tab_sync <= 0 then UI.tab_sync = nil; UI.sync_tab_order() end
+    end
     if ImGui.TabItemButton(ctx, "+", ImGui.TabItemFlags_Trailing | ImGui.TabItemFlags_NoTooltip) then action = { "add" } end
     if ImGui.IsItemHovered(ctx) then
       ImGui.SetTooltip(ctx, "New tab, starting as a copy of this one.\n" ..
         "Each tab keeps its own Wwise structure and settings. Default is this project's own setup;\n" ..
         "the other tabs are shared presets, the same in every project.\n" ..
-        "Double-click a tab to rename it, right-click for its color, name and order.")
+        "Drag a tab to move it. Double-click a tab to rename it, right-click for its color, name and order.")
     end
     ImGui.EndTabBar(ctx)
   end
@@ -2759,6 +2801,7 @@ local function follow_project_tab()
   dirty_settings = false
   cur_proj = proj
   tabs = core.load_tabs()
+  UI.renew_tab_ids()
   S = tabs.list[tabs.active].s
   core.http_port = S.http_port
   tab_select_pending = true

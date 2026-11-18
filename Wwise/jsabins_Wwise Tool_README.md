@@ -93,6 +93,7 @@ The left panel's width can be changed: drag the edge between it and the preview.
 Under the toolbar is a row of tabs. Each tab is a complete setup: the Wwise structure, the destination, the source, the Originals location, the Renders location, the conflict and Initial Delay options, the Mono/Stereo, Streaming and Loop choices from the preview, and the Rendering, Channels, Transfer and Stream & loop options in **Settings**. Click a tab to switch to it; everything on the left and the preview change to that tab's setup. Only the connection port is shared by all tabs.
 
 - **+** adds a new tab that starts as a copy of the one showing.
+- **Drag** a tab left or right to change the order (Default always stays first).
 - **Double-click** a tab to rename it.
 - **Right-click** a tab to edit it: click the color swatch to give the tab its own color, type a new name, or **Close tab**. Underneath, **Reset color** goes back to the normal tab color, **Duplicate** adds a copy next to it, and the **Tab order** arrows move it left or right. New and duplicated tabs keep the color of the tab they were copied from.
 - Close a tab with its **x** (or middle-click it). You're asked first, because its setup goes with it, in every project. **Default** can't be closed or moved.
