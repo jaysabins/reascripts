@@ -8,6 +8,8 @@
 --   the last Default you used. Each project still opens on the tab it was showing.
 --   Default can't be closed or moved; the other tabs can.
 --   Drag a tab left or right to change the tab order (the right-click arrows still work).
+--   Structure presets moved from the button under the rows to a flat layers icon at the end of
+--   the "Wwise structure" title line (same Load / Save popup).
 --   Settings: the Close button at the bottom is gone (use the X or Esc). Clicking the gear
 --   while Settings is open brings the Settings window to the front.
 --   Quick send uses the shared tab's latest settings.
@@ -580,6 +582,25 @@ UI.draw_from_wwise = function(dl, x1, y1, size, fg)
   local h = rad * 0.45
   ImGui.DrawList_AddTriangleFilled(dl, l - th * 0.5, cy, l + h, cy - h * 0.85, l + h, cy + h * 0.85, fg)
 end
+-- Structure presets: three stacked layers (a diamond on top, two chevrons under it).
+UI.draw_layers = function(dl, x1, y1, size, fg)
+  local th = math.max(1.2, size * 0.065)
+  local cx = x1 + size / 2
+  local hw, hh = size * 0.28, size * 0.12
+  local top = y1 + size * 0.24
+  ImGui.DrawList_PathLineTo(dl, cx, top)
+  ImGui.DrawList_PathLineTo(dl, cx + hw, top + hh)
+  ImGui.DrawList_PathLineTo(dl, cx, top + hh * 2)
+  ImGui.DrawList_PathLineTo(dl, cx - hw, top + hh)
+  ImGui.DrawList_PathStroke(dl, fg, ImGui.DrawFlags_Closed, th)
+  for k = 1, 2 do
+    local y = top + hh + k * size * 0.15
+    ImGui.DrawList_PathLineTo(dl, cx - hw, y)
+    ImGui.DrawList_PathLineTo(dl, cx, y + hh)
+    ImGui.DrawList_PathLineTo(dl, cx + hw, y)
+    ImGui.DrawList_PathStroke(dl, fg, 0, th)
+  end
+end
 -- Browse: a folder outline (tab on the top left).
 UI.draw_folder = function(dl, x1, y1, size, fg)
   local th = math.max(1.2, size * 0.065)
@@ -791,12 +812,11 @@ end
 
 local function dim_label(text) ImGui.TextColored(ctx, COLOR_DIM, text) end
 
--- "Presets..." button and popup for one kind of preset ("structure" or "settings").
-local function presets_button(kind, label, tip)
+-- Popup for one kind of preset ("structure" or "settings"): load, save, delete.
+-- Opened with ImGui.OpenPopup(ctx, "presets_" .. kind) from the same window.
+UI.presets_popup = function(kind)
   local list = presets[kind]
   local pop = "presets_" .. kind
-  if ImGui.Button(ctx, label) then ImGui.OpenPopup(ctx, pop) end
-  if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, tip) end
   if ImGui.BeginPopup(ctx, pop) then
     ImGui.Text(ctx, "Load")
     local names = {}
@@ -824,6 +844,12 @@ local function presets_button(kind, label, tip)
     end
     ImGui.EndPopup(ctx)
   end
+end
+-- "Presets..." button with its popup.
+local function presets_button(kind, label, tip)
+  if ImGui.Button(ctx, label) then ImGui.OpenPopup(ctx, "presets_" .. kind) end
+  if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, tip) end
+  UI.presets_popup(kind)
 end
 
 -- Every field and dropdown under Source and Destination has this width, so they all end at the
@@ -1194,7 +1220,29 @@ UI.type_combo = function(id, items, value, w, color_of)
 end
 
 local function section_hierarchy()
-  section_title("Wwise structure")
+  -- Section title with a flat "Structure presets" icon at the end of its line (the line stops
+  -- short of it). Same title as section_title() otherwise.
+  local x0 = ImGui.GetCursorScreenPos(ctx)
+  local aw = ImGui.GetContentRegionAvail(ctx)
+  local isz = ImGui.GetFrameHeight(ctx)
+  local big = section_font and pcall(ImGui.PushFont, ctx, section_font)
+  local _, cy = ImGui.GetCursorScreenPos(ctx)
+  ImGui.PushClipRect(ctx, x0, cy - 4, x0 + aw - isz - 6, cy + 200, true)
+  ImGui.SeparatorText(ctx, "Wwise structure")
+  ImGui.PopClipRect(ctx)
+  local _, ty1 = ImGui.GetItemRectMin(ctx)
+  local _, ty2 = ImGui.GetItemRectMax(ctx)
+  if big then ImGui.PopFont(ctx) end
+  local ax, ay = ImGui.GetCursorScreenPos(ctx)
+  ImGui.SetCursorScreenPos(ctx, x0 + aw - isz, (ty1 + ty2) / 2 - isz / 2)
+  if title_icon_button("##structpresets", isz, UI.draw_layers) then ImGui.OpenPopup(ctx, "presets_structure") end
+  if ImGui.IsItemHovered(ctx) then
+    ImGui.SetTooltip(ctx, "Structure presets\nSave or load just the Wwise structure (levels, names, templates and the Sound row).\n" ..
+      "Loading one leaves your other settings as they are.")
+  end
+  UI.presets_popup("structure")
+  ImGui.SetCursorScreenPos(ctx, ax, ay)
+  ImGui.Dummy(ctx, 0, 0) -- a little more room under the title (one item spacing)
   ImGui.PushTextWrapPos(ctx, 0)
   dim_label("Levels created under the destination, top to bottom. Names can use wildcards.")
   ImGui.PopTextWrapPos(ctx)
@@ -1300,20 +1348,7 @@ local function section_hierarchy()
     local c
     c, S.leaf.language = combo("Voice language", langs, S.leaf.language, 160)
     if c then settings_changed() end
-    -- Same line when it fits, otherwise on the next one.
-    local pad_x = ImGui.GetStyleVar(ctx, ImGui.StyleVar_FramePadding)
-    local need = ImGui.CalcTextSize(ctx, "Structure presets...") + pad_x * 2 + 20
-    ImGui.SameLine(ctx)
-    if ImGui.GetContentRegionAvail(ctx) >= need then
-      ImGui.Dummy(ctx, 12, 0)
-      ImGui.SameLine(ctx)
-    else
-      ImGui.NewLine(ctx)
-    end
   end
-  presets_button("structure", "Structure presets...",
-    "Save or load just the Wwise structure (levels, names, templates and the Sound row).\n" ..
-    "Loading one leaves your other settings as they are.")
 end
 
 

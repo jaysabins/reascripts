@@ -110,7 +110,7 @@ Presets still work inside a tab: loading a structure or settings preset changes 
 
 There are two kinds of presets, so you can load one part of a setup without changing the rest:
 
-- **Structure presets...** (under **Wwise structure**) save just the structure: the levels, their names and property templates, and the Sound row (SFX or Voice, name, template and language).
+- **Structure presets** (the layers icon at the right end of the **Wwise structure** title) save just the structure: the levels, their names and property templates, and the Sound row (SFX or Voice, name, template and language).
 - **Settings presets...** (in **Settings > Configuration**) save everything else: the source, the destination, the Originals location, the Renders location, the conflict choice, the Initial Delay options, and the rendering and transfer options in **Settings**.
 
 In either popup, click a name under **Load** to load it. To save, type a name and click **Save** (an existing name is overwritten). To delete, type or load its name and click **Delete**.
@@ -158,7 +158,7 @@ This sets the containers that are created above each Sound, from the top down:
 - Click a row's **-** to remove that level. The **+** and **-** buttons sit on each row, so you always see which level they act on.
 - To move a level, drag the handle (three lines) at the left of its row onto another level.
 - Each row's clipboard button holds its property template. The clipboard is dim when no template is set and turns amber when one is. See [Property templates](#property-templates).
-- **Structure presets...** saves just the structure (the levels with their names and templates, and the Sound row with its type, name, template and language) under a name, and loads or deletes saved ones. Loading one changes only the structure. See [Presets](#presets).
+- **Structure presets** (the layers icon at the right end of the section's title line) saves just the structure (the levels with their names and templates, and the Sound row with its type, name, template and language) under a name, and loads or deletes saved ones. Loading one changes only the structure. See [Presets](#presets).
 
 If a level can't hold the level below it (for example a Random Container can't hold an Actor-Mixer), the problem is shown and Transfer stays greyed out until you fix it.
 
