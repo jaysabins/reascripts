@@ -10,9 +10,8 @@
 --   Drag a tab left or right to change the tab order (the right-click arrows still work).
 --   Structure presets moved from the button under the rows to a flat layers icon at the end of
 --   the "Wwise structure" title line (same Load / Save popup).
---   Wwise structure rows show short type names (Property, Random, Blend, Virtual...) without the
---   dropdown arrow, so names aren't cut off and the name field is wider. The list and the
---   tooltip still show the full names.
+--   The Wwise structure type column is as wide as the longest type name, so names like
+--   "Property Container" are no longer cut off.
 --   Settings: the Close button at the bottom is gone (use the X or Esc). Clicking the gear
 --   while Settings is open brings the Settings window to the front.
 --   Quick send uses the shared tab's latest settings.
@@ -1197,21 +1196,15 @@ end
 
 -- Wwise structure type dropdown: grey frame with a colored dot and the type name in its color
 -- drawn over it (the combo's own preview is left empty). Each choice in the list is in its color.
--- The row shows a short name (the dot tells the types apart); the list and the tooltip show
--- the full one. No arrow box, so the row has room for the name field.
-UI.SHORT_TYPE = { ["Property Container"] = "Property", ["Random Container"] = "Random",
-  ["Sequence Container"] = "Sequence", ["Switch Container"] = "Switch", ["Blend Container"] = "Blend",
-  ["Virtual Folder"] = "Virtual", ["Physical Folder"] = "Physical" }
-UI.short_type = function(label) return UI.SHORT_TYPE[label] or label end
-UI.TYPE_COMBO_FLAGS = UI.flag("ComboFlags_NoArrowButton")
--- Width of a type dropdown that fits the longest short name in `labels`.
+-- Width of a type dropdown that fits the longest name in `labels` (dot, name and arrow box),
+-- so no type name is cut off.
 UI.type_combo_w = function(labels)
   local h = ImGui.GetFrameHeight(ctx)
   local pad_x = ImGui.GetStyleVar(ctx, ImGui.StyleVar_FramePadding)
   local r = math.max(2.5, math.floor(h * 0.17 + 0.5))
   local tw = 0
-  for _, l in ipairs(labels) do tw = math.max(tw, (ImGui.CalcTextSize(ctx, UI.short_type(l)))) end
-  return math.floor(pad_x * 2 + r * 2 + 5 + tw + (UI.TYPE_COMBO_FLAGS ~= 0 and 2 or h) + 0.5)
+  for _, l in ipairs(labels) do tw = math.max(tw, (ImGui.CalcTextSize(ctx, l))) end
+  return math.floor(pad_x * 2 + r * 2 + 5 + tw + h + 0.5)
 end
 UI.type_combo = function(id, items, value, w, color_of)
   local x, y = ImGui.GetCursorScreenPos(ctx)
@@ -1220,7 +1213,7 @@ UI.type_combo = function(id, items, value, w, color_of)
   for _, it in ipairs(items) do if it[1] == value then label = it[2] end end
   local changed, new = false, value
   ImGui.SetNextItemWidth(ctx, w)
-  if ImGui.BeginCombo(ctx, id, "", UI.TYPE_COMBO_FLAGS) then
+  if ImGui.BeginCombo(ctx, id, "") then
     for _, it in ipairs(items) do
       local ic = color_of(it[1])
       if ic then ImGui.PushStyleColor(ctx, ImGui.Col_Text, ic) end
@@ -1229,16 +1222,15 @@ UI.type_combo = function(id, items, value, w, color_of)
     end
     ImGui.EndCombo(ctx)
   end
-  if ImGui.IsItemHovered(ctx) and UI.short_type(label) ~= label then ImGui.SetTooltip(ctx, label) end
   local dl = ImGui.GetWindowDrawList(ctx)
   local pad_x = ImGui.GetStyleVar(ctx, ImGui.StyleVar_FramePadding)
   local col = color_of(new) or ImGui.GetColor(ctx, ImGui.Col_Text)
   local r = math.max(2.5, math.floor(h * 0.17 + 0.5))
   local cx, cy = x + pad_x + r, y + h / 2
   ImGui.DrawList_AddCircleFilled(dl, cx, cy, r, col)
-  for _, it in ipairs(items) do if it[1] == new then label = UI.short_type(it[2]) end end
+  for _, it in ipairs(items) do if it[1] == new then label = it[2] end end
   local _, th = ImGui.CalcTextSize(ctx, label)
-  ImGui.DrawList_PushClipRect(dl, x, y, x + w - (UI.TYPE_COMBO_FLAGS ~= 0 and 2 or h), y + h, true)
+  ImGui.DrawList_PushClipRect(dl, x, y, x + w - h, y + h, true)
   ImGui.DrawList_AddText(dl, cx + r + 5, y + (h - th) / 2, col, label)
   ImGui.DrawList_PopClipRect(dl)
   return changed, new
