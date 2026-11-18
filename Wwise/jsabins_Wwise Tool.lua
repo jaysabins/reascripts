@@ -1,13 +1,24 @@
 -- @description Wwise Tool (send REAPER audio to Wwise)
 -- @author Jay Sabins
--- @version 1.24.0
+-- @version 1.25.0
 -- @changelog
---   Tabs are now the same in every project. Adding, closing, renaming, recoloring or
---   reordering a tab does it everywhere, and switching projects no longer swaps the tab list.
---   Each project still remembers which tab it was on and its own settings in each tab, so a
---   project opens the way you left it. A tab you haven't used in a project yet starts with that
---   tab's last-edited settings. The first time, tabs from your other projects are added to the
---   shared list (matched by name), so none are lost.
+--   Tabs are now shared presets: an edit to a tab like "Weapons" in one project shows up in
+--   every project. The Default tab (always first) is each project's own setup instead, so a
+--   project opens with Default the way you left it there. A new project's Default starts from
+--   the last Default you used. Each project still opens on the tab it was showing.
+--   Default can't be closed or moved; the other tabs can.
+--   Drag a tab left or right to change the tab order (the right-click arrows still work).
+--   Structure presets moved from the button under the rows to a flat layers icon at the end of
+--   the "Wwise structure" title line (same Load / Save popup).
+--   Wwise structure rows have more room for names: the type shows as its full name in its
+--   color (no dot or arrow box) in a column as wide as the longest name; $ and the property
+--   template button sit inside the end of the name field; a small x on the hovered row removes
+--   a level, and "+ Add level" under the rows adds one (drag a level by its handle to move it).
+--   Settings: the Close button at the bottom is gone (use the X or Esc). Clicking the gear
+--   while Settings is open brings the Settings window to the front.
+--   Quick send uses the shared tab's latest settings.
+--   Coming from 1.24.0: a tab named Default becomes the project tab; if there isn't one, a
+--   Default tab is added with the setup each project was last using.
 -- @provides
 --   [main] jsabins_Wwise Tool - Quick send.lua
 --   [nomain] jsabins_WwiseTool_core.lua
@@ -25,7 +36,7 @@
 --     Work Units) named with REAPER wildcards like $region, $track, $item.
 --   - Property templates per level, Sound SFX or Sound Voice (with language),
 --     Originals location (wildcards allowed).
---   - Tabs, each a whole setup you can flick between, shared by every project (each project keeps its own settings per tab). Conflict handling, structure and settings presets, export/import of the whole configuration, live preview (new vs existing objects),
+--   - Tabs, each a whole setup you can flick between, shared by every project as presets, plus a Default tab that is each project's own setup. Conflict handling, structure and settings presets, export/import of the whole configuration, live preview (new vs existing objects),
 --     transfer summary. One Wwise undo step per transfer.
 --   - Auto mono/stereo: a Sound whose left and right match is made mono
 --     (also for folder items). Click the preview's Channels column to force
@@ -64,6 +75,11 @@ local ctx = ImGui.CreateContext("Wwise Tool")
 -- If the font can't be made, the header just uses the normal font.
 -- Layout constants live in one table: the main chunk is at Lua's 200-locals limit.
 local UI = {}
+-- An ImGui flag by name, or 0 when this ReaImGui version doesn't have it.
+UI.flag = function(name)
+  local ok, v = pcall(function() return ImGui[name] end)
+  return ok and type(v) == "number" and v or 0
+end
 -- Look of the window, set in Settings > Appearance (saved with the other window settings, in
 -- view.look). Colors are 0xRRGGBBAA; nil means the built-in default. Fonts are made once at
 -- startup, so font changes apply the next time the window opens; everything else applies live.
@@ -430,8 +446,8 @@ local function input(label, value, hint, width)
   return v
 end
 
-local function wildcard_menu(id, apply, ghost, size)
-  ImGui.SameLine(ctx)
+local function wildcard_menu(id, apply, ghost, size, tight)
+  if tight then ImGui.SameLine(ctx, 0, 0) else ImGui.SameLine(ctx) end
   local gn = UI.ghost_push(ghost)
   if ImGui.Button(ctx, "$##wc" .. id, size or 0, size or 0) then ImGui.OpenPopup(ctx, "wcpop" .. id) end
   if gn > 0 then ImGui.PopStyleColor(ctx, gn) end
@@ -574,6 +590,25 @@ UI.draw_from_wwise = function(dl, x1, y1, size, fg)
   ImGui.DrawList_AddLine(dl, l + th, cy, rr, cy, fg, th)
   local h = rad * 0.45
   ImGui.DrawList_AddTriangleFilled(dl, l - th * 0.5, cy, l + h, cy - h * 0.85, l + h, cy + h * 0.85, fg)
+end
+-- Structure presets: three stacked layers (a diamond on top, two chevrons under it).
+UI.draw_layers = function(dl, x1, y1, size, fg)
+  local th = math.max(1.2, size * 0.065)
+  local cx = x1 + size / 2
+  local hw, hh = size * 0.28, size * 0.12
+  local top = y1 + size * 0.24
+  ImGui.DrawList_PathLineTo(dl, cx, top)
+  ImGui.DrawList_PathLineTo(dl, cx + hw, top + hh)
+  ImGui.DrawList_PathLineTo(dl, cx, top + hh * 2)
+  ImGui.DrawList_PathLineTo(dl, cx - hw, top + hh)
+  ImGui.DrawList_PathStroke(dl, fg, ImGui.DrawFlags_Closed, th)
+  for k = 1, 2 do
+    local y = top + hh + k * size * 0.15
+    ImGui.DrawList_PathLineTo(dl, cx - hw, y)
+    ImGui.DrawList_PathLineTo(dl, cx, y + hh)
+    ImGui.DrawList_PathLineTo(dl, cx + hw, y)
+    ImGui.DrawList_PathStroke(dl, fg, 0, th)
+  end
 end
 -- Browse: a folder outline (tab on the top left).
 UI.draw_folder = function(dl, x1, y1, size, fg)
@@ -786,12 +821,11 @@ end
 
 local function dim_label(text) ImGui.TextColored(ctx, COLOR_DIM, text) end
 
--- "Presets..." button and popup for one kind of preset ("structure" or "settings").
-local function presets_button(kind, label, tip)
+-- Popup for one kind of preset ("structure" or "settings"): load, save, delete.
+-- Opened with ImGui.OpenPopup(ctx, "presets_" .. kind) from the same window.
+UI.presets_popup = function(kind)
   local list = presets[kind]
   local pop = "presets_" .. kind
-  if ImGui.Button(ctx, label) then ImGui.OpenPopup(ctx, pop) end
-  if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, tip) end
   if ImGui.BeginPopup(ctx, pop) then
     ImGui.Text(ctx, "Load")
     local names = {}
@@ -819,6 +853,12 @@ local function presets_button(kind, label, tip)
     end
     ImGui.EndPopup(ctx)
   end
+end
+-- "Presets..." button with its popup.
+local function presets_button(kind, label, tip)
+  if ImGui.Button(ctx, label) then ImGui.OpenPopup(ctx, "presets_" .. kind) end
+  if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, tip) end
+  UI.presets_popup(kind)
 end
 
 -- Every field and dropdown under Source and Destination has this width, so they all end at the
@@ -1113,23 +1153,6 @@ local function grip_handle(id, w, h)
   end
 end
 
--- Square + / - button with the symbol drawn bigger than the font's "+" and "-".
-local function pm_button(id, plus, size, ghost)
-  local gn = UI.ghost_push(ghost)
-  local pressed = ImGui.Button(ctx, id, size, size)
-  if gn > 0 then ImGui.PopStyleColor(ctx, gn) end
-  local x1, y1 = ImGui.GetItemRectMin(ctx)
-  local dl = ImGui.GetWindowDrawList(ctx)
-  local col = ghost and 0x8A8A8AFF or ImGui.GetColor(ctx, ImGui.Col_Text)
-  -- 2px lines on whole pixels (ImGui adds half a pixel to lines, so take it back off).
-  local c = math.floor(size / 2 + 0.5)
-  local cx, cy = math.floor(x1 + 0.5) + c - 0.5, math.floor(y1 + 0.5) + c - 0.5
-  local h = math.floor(size * 0.20 + 0.5)
-  ImGui.DrawList_AddLine(dl, cx - h, cy, cx + h, cy, col, 2)
-  if plus then ImGui.DrawList_AddLine(dl, cx, cy - h, cx, cy + h, col, 2) end
-  return pressed
-end
-
 local function new_level(at)
   table.insert(S.rows, at, { type = #S.rows == 0 and "Actor-Mixer" or "Random Container", name = "", template = "" })
   settings_changed()
@@ -1158,6 +1181,17 @@ end
 
 -- Wwise structure type dropdown: grey frame with a colored dot and the type name in its color
 -- drawn over it (the combo's own preview is left empty). Each choice in the list is in its color.
+-- The type shows as its full name in its color: no dot, and no arrow box when this ReaImGui
+-- has ComboFlags_NoArrowButton (click the name for the list).
+UI.TYPE_COMBO_FLAGS = UI.flag("ComboFlags_NoArrowButton")
+UI.type_arrow_w = function() return UI.TYPE_COMBO_FLAGS ~= 0 and 0 or ImGui.GetFrameHeight(ctx) end
+-- Width of a type dropdown that fits the longest name in `labels`, so no type name is cut off.
+UI.type_combo_w = function(labels)
+  local pad_x = ImGui.GetStyleVar(ctx, ImGui.StyleVar_FramePadding)
+  local tw = 0
+  for _, l in ipairs(labels) do tw = math.max(tw, (ImGui.CalcTextSize(ctx, l))) end
+  return math.floor(pad_x * 2 + tw + 2 + UI.type_arrow_w() + 0.5)
+end
 UI.type_combo = function(id, items, value, w, color_of)
   local x, y = ImGui.GetCursorScreenPos(ctx)
   local h = ImGui.GetFrameHeight(ctx)
@@ -1165,7 +1199,7 @@ UI.type_combo = function(id, items, value, w, color_of)
   for _, it in ipairs(items) do if it[1] == value then label = it[2] end end
   local changed, new = false, value
   ImGui.SetNextItemWidth(ctx, w)
-  if ImGui.BeginCombo(ctx, id, "") then
+  if ImGui.BeginCombo(ctx, id, "", UI.TYPE_COMBO_FLAGS) then
     for _, it in ipairs(items) do
       local ic = color_of(it[1])
       if ic then ImGui.PushStyleColor(ctx, ImGui.Col_Text, ic) end
@@ -1177,31 +1211,100 @@ UI.type_combo = function(id, items, value, w, color_of)
   local dl = ImGui.GetWindowDrawList(ctx)
   local pad_x = ImGui.GetStyleVar(ctx, ImGui.StyleVar_FramePadding)
   local col = color_of(new) or ImGui.GetColor(ctx, ImGui.Col_Text)
-  local r = math.max(2.5, math.floor(h * 0.17 + 0.5))
-  local cx, cy = x + pad_x + r, y + h / 2
-  ImGui.DrawList_AddCircleFilled(dl, cx, cy, r, col)
   for _, it in ipairs(items) do if it[1] == new then label = it[2] end end
   local _, th = ImGui.CalcTextSize(ctx, label)
-  ImGui.DrawList_PushClipRect(dl, x, y, x + w - h, y + h, true)
-  ImGui.DrawList_AddText(dl, cx + r + 5, y + (h - th) / 2, col, label)
+  ImGui.DrawList_PushClipRect(dl, x, y, x + w - UI.type_arrow_w(), y + h, true)
+  ImGui.DrawList_AddText(dl, x + pad_x, y + (h - th) / 2, col, label)
   ImGui.DrawList_PopClipRect(dl)
   return changed, new
 end
 
+-- Name field with the $ (wildcards) and template buttons inside its right end: one rounded
+-- field shape is painted first, the text input (no frame of its own) and the two flat buttons
+-- go on top of it side by side, so nothing overlaps.
+UI.name_field = function(id, hint, value, w, ghost, wc_id, apply_wc, get_t, set_t)
+  local sq = ImGui.GetFrameHeight(ctx)
+  local x, y = ImGui.GetCursorScreenPos(ctx)
+  local mx, my = ImGui.GetMousePos(ctx)
+  local over = mx >= x and mx < x + w and my >= y and my < y + sq
+  local dl = ImGui.GetWindowDrawList(ctx)
+  ImGui.DrawList_AddRectFilled(dl, x, y, x + w, y + sq,
+    ImGui.GetColor(ctx, over and ImGui.Col_FrameBgHovered or ImGui.Col_FrameBg), UI.FRAME_ROUNDING)
+  ImGui.PushStyleColor(ctx, ImGui.Col_FrameBg, 0x00000000)
+  ImGui.PushStyleColor(ctx, ImGui.Col_FrameBgHovered, 0x00000000)
+  ImGui.PushStyleColor(ctx, ImGui.Col_FrameBgActive, 0x00000000)
+  ImGui.SetNextItemWidth(ctx, math.max(20, w - sq * 2))
+  local ch, v = ImGui.InputTextWithHint(ctx, id, hint, value or "")
+  ImGui.PopStyleColor(ctx, 3)
+  local after = ImGui.IsItemActive(ctx) -- typing: keep the buttons lit
+  ImGui.PushStyleColor(ctx, ImGui.Col_Button, 0x00000000)
+  ImGui.PushStyleColor(ctx, ImGui.Col_ButtonHovered, 0xFFFFFF18)
+  ImGui.PushStyleColor(ctx, ImGui.Col_ButtonActive, 0xFFFFFF28)
+  local faint = ghost and not after
+  if faint then ImGui.PushStyleColor(ctx, ImGui.Col_Text, 0x8A8A8AFF) end
+  wildcard_menu(wc_id, apply_wc, false, sq, true)
+  ImGui.SameLine(ctx, 0, 0)
+  level_options(wc_id, get_t, set_t, sq, false)
+  if faint then ImGui.PopStyleColor(ctx) end
+  ImGui.PopStyleColor(ctx, 3)
+  return ch, v
+end
+
+-- Small x to remove a level: only drawn while its row is hovered (the space stays).
+UI.remove_button = function(id, size, ghost)
+  local pressed = ImGui.InvisibleButton(ctx, id, size, size)
+  if not ghost or ImGui.IsItemHovered(ctx) then
+    local x1, y1 = ImGui.GetItemRectMin(ctx)
+    local hov = ImGui.IsItemHovered(ctx)
+    local dl = ImGui.GetWindowDrawList(ctx)
+    if hov then ImGui.DrawList_AddRectFilled(dl, x1, y1, x1 + size, y1 + size, 0x8E2A2AFF, UI.FRAME_ROUNDING) end
+    local c, h = size / 2, math.floor(size * 0.17 + 0.5)
+    local col = hov and 0xFFFFFFFF or 0xC86464FF
+    ImGui.DrawList_AddLine(dl, x1 + c - h, y1 + c - h, x1 + c + h, y1 + c + h, col, 1.6)
+    ImGui.DrawList_AddLine(dl, x1 + c + h, y1 + c - h, x1 + c - h, y1 + c + h, col, 1.6)
+  end
+  return pressed
+end
+
 local function section_hierarchy()
-  section_title("Wwise structure")
+  -- Section title with a flat "Structure presets" icon at the end of its line (the line stops
+  -- short of it). Same title as section_title() otherwise.
+  local x0 = ImGui.GetCursorScreenPos(ctx)
+  local aw = ImGui.GetContentRegionAvail(ctx)
+  local isz = ImGui.GetFrameHeight(ctx)
+  local big = section_font and pcall(ImGui.PushFont, ctx, section_font)
+  local _, cy = ImGui.GetCursorScreenPos(ctx)
+  ImGui.PushClipRect(ctx, x0, cy - 4, x0 + aw - isz - 6, cy + 200, true)
+  ImGui.SeparatorText(ctx, "Wwise structure")
+  ImGui.PopClipRect(ctx)
+  local _, ty1 = ImGui.GetItemRectMin(ctx)
+  local _, ty2 = ImGui.GetItemRectMax(ctx)
+  if big then ImGui.PopFont(ctx) end
+  local ax, ay = ImGui.GetCursorScreenPos(ctx)
+  ImGui.SetCursorScreenPos(ctx, x0 + aw - isz, (ty1 + ty2) / 2 - isz / 2)
+  if title_icon_button("##structpresets", isz, UI.draw_layers) then ImGui.OpenPopup(ctx, "presets_structure") end
+  if ImGui.IsItemHovered(ctx) then
+    ImGui.SetTooltip(ctx, "Structure presets\nSave or load just the Wwise structure (levels, names, templates and the Sound row).\n" ..
+      "Loading one leaves your other settings as they are.")
+  end
+  UI.presets_popup("structure")
+  ImGui.SetCursorScreenPos(ctx, ax, ay)
+  ImGui.Dummy(ctx, 0, 0) -- a little more room under the title (one item spacing)
   ImGui.PushTextWrapPos(ctx, 0)
   dim_label("Levels created under the destination, top to bottom. Names can use wildcards.")
   ImGui.PopTextWrapPos(ctx)
 
-  -- "Quiet rows": no table lines or header. Grey fields; each level's type is a colored dot and
-  -- colored name in its dropdown. $, template and +/- are faint until the row is hovered.
+  -- "Quiet rows": no table lines or header. Grey fields; each level's type is its full name in
+  -- its color. $ and template sit inside the name field (faint until the row is hovered), a
+  -- small x removes the hovered level, and "+ Add level" under the rows adds one.
   local sq = ImGui.GetFrameHeight(ctx)
   local sp = ImGui.GetStyleVar(ctx, ImGui.StyleVar_ItemSpacing)
   local act = {}
   local avail = ImGui.GetContentRegionAvail(ctx)
-  local type_w = 150
-  local name_w = math.max(60, avail - 12 - type_w - sq * 4 - UI.PM_GAP - sp * 5)
+  local type_labels = { "Sound SFX", "Sound Voice" }
+  for _, t in ipairs(core.CONTAINER_TYPES) do type_labels[#type_labels + 1] = core.type_label(t) end
+  local type_w = UI.type_combo_w(type_labels)
+  local name_w = math.max(60, avail - 12 - type_w - sq - sp * 3) -- grip, type, name (+$, template), x
   local hover_next = nil
   local mx, my = ImGui.GetMousePos(ctx)
   local win_hovered = ImGui.IsWindowHovered(ctx, ImGui.HoveredFlags_AllowWhenBlockedByActiveItem or 0)
@@ -1236,18 +1339,13 @@ local function section_hierarchy()
     if c then settings_changed() end
     level_drop_target(i, act)
     ImGui.SameLine(ctx)
-    ImGui.SetNextItemWidth(ctx, name_w)
-    local ch, v = ImGui.InputTextWithHint(ctx, "##name", "e.g. $region", row.name or "")
+    local ch, v = UI.name_field("##name", "e.g. $region", row.name, name_w, ghost, "r" .. i,
+      function(w) row.name = (row.name or "") .. w end,
+      function() return row.template end, function(t) row.template = t end)
     if ch then row.name = v; settings_changed() end
     level_drop_target(i, act)
-    wildcard_menu("r" .. i, function(w) row.name = (row.name or "") .. w end, ghost, sq)
     ImGui.SameLine(ctx)
-    level_options("r" .. i, function() return row.template end, function(t) row.template = t end, sq, ghost)
-    ImGui.SameLine(ctx)
-    if pm_button("##add", true, sq, ghost) then act.add = i + 1 end
-    if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Add level below this one") end
-    ImGui.SameLine(ctx, 0, UI.PM_GAP)
-    if pm_button("##rem", false, sq, ghost) then act.remove = i end
+    if UI.remove_button("##rem", sq, ghost) then act.remove = i end
     if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Remove this level") end
     ImGui.PopID(ctx)
   end
@@ -1265,18 +1363,25 @@ local function section_hierarchy()
     if S.leaf.voice and S.leaf.language == "" and conn and conn.languages[1] then S.leaf.language = conn.languages[1] end
   end
   ImGui.SameLine(ctx)
-  ImGui.SetNextItemWidth(ctx, name_w)
-  local ch, v = ImGui.InputTextWithHint(ctx, "##leafname", S.source ~= "render" and "(item name)" or "(rendered file name)", S.leaf.name)
+  local ch, v = UI.name_field("##leafname", S.source ~= "render" and "(item name)" or "(rendered file name)",
+    S.leaf.name, name_w, ghost, "leaf", function(w) S.leaf.name = S.leaf.name .. w end,
+    function() return S.leaf.template end, function(t) S.leaf.template = t end)
   if ch then S.leaf.name = v; settings_changed() end
-  wildcard_menu("leaf", function(w) S.leaf.name = S.leaf.name .. w end, ghost, sq)
-  ImGui.SameLine(ctx)
-  level_options("leaf", function() return S.leaf.template end, function(t) S.leaf.template = t end, sq, ghost)
-  ImGui.SameLine(ctx)
-  if pm_button("##add", true, sq, ghost) then act.add = #S.rows + 1 end
-  if ImGui.IsItemHovered(ctx) then
-    ImGui.SetTooltip(ctx, #S.rows == 0 and "Add level above the Sound" or "Add level just above the Sound")
-  end
   ImGui.PopID(ctx)
+  -- "+ Add level": a quiet text button under the rows; the new level goes just above the Sound
+  -- (drag it by its handle to move it).
+  ImGui.Dummy(ctx, 12, 0)
+  ImGui.SameLine(ctx)
+  ImGui.PushStyleColor(ctx, ImGui.Col_Button, 0x00000000)
+  ImGui.PushStyleColor(ctx, ImGui.Col_ButtonHovered, 0xFFFFFF14)
+  ImGui.PushStyleColor(ctx, ImGui.Col_ButtonActive, 0xFFFFFF24)
+  ImGui.PushStyleColor(ctx, ImGui.Col_Text, 0x9A9A9AFF)
+  if ImGui.Button(ctx, "+ Add level##addlevel") then act.add = #S.rows + 1 end
+  ImGui.PopStyleColor(ctx, 4)
+  if ImGui.IsItemHovered(ctx) then
+    ImGui.SetTooltip(ctx, #S.rows == 0 and "Add a level above the Sound" or
+      "Add a level just above the Sound.\nDrag a level by its handle to move it.")
+  end
   UI.map_hover = hover_next
 
   if act.remove then table.remove(S.rows, act.remove); settings_changed()
@@ -1295,20 +1400,7 @@ local function section_hierarchy()
     local c
     c, S.leaf.language = combo("Voice language", langs, S.leaf.language, 160)
     if c then settings_changed() end
-    -- Same line when it fits, otherwise on the next one.
-    local pad_x = ImGui.GetStyleVar(ctx, ImGui.StyleVar_FramePadding)
-    local need = ImGui.CalcTextSize(ctx, "Structure presets...") + pad_x * 2 + 20
-    ImGui.SameLine(ctx)
-    if ImGui.GetContentRegionAvail(ctx) >= need then
-      ImGui.Dummy(ctx, 12, 0)
-      ImGui.SameLine(ctx)
-    else
-      ImGui.NewLine(ctx)
-    end
   end
-  presets_button("structure", "Structure presets...",
-    "Save or load just the Wwise structure (levels, names, templates and the Sound row).\n" ..
-    "Loading one leaves your other settings as they are.")
 end
 
 
@@ -2298,9 +2390,15 @@ local function settings_window()
   if open_settings then
     open_settings = false
     UI.settings_open = true
-    ImGui.SetNextWindowFocus(ctx) -- clicking the gear again brings it to the front
+    UI.settings_focus = 3
   end
   if not UI.settings_open then return end
+  -- Clicking the gear while Settings is open brings it to the front. Asked for a few frames,
+  -- because the click itself focuses the main window first.
+  if UI.settings_focus then
+    ImGui.SetNextWindowFocus(ctx)
+    UI.settings_focus = UI.settings_focus > 1 and UI.settings_focus - 1 or nil
+  end
   ImGui.SetNextWindowSize(ctx, 720, 460, ImGui.Cond_FirstUseEver)
   ImGui.SetNextWindowSizeConstraints(ctx, 520, 300, 3000, 3000)
   -- Same look as the main window when floating: big rounded corners, one solid #191919 shape
@@ -2359,13 +2457,10 @@ local function settings_window()
 
   ImGui.Separator(ctx)
   ImGui.TextDisabled(ctx, "Wwise Tool " .. core.VERSION)
-  ImGui.SameLine(ctx)
-  local w = 80
-  local avail = ImGui.GetContentRegionAvail(ctx)
-  if avail > w then ImGui.SetCursorPosX(ctx, ImGui.GetCursorPosX(ctx) + avail - w) end
+  -- No Close button (the X in the corner does it); Esc still closes.
   local esc = ImGui.IsWindowFocused(ctx, ImGui.FocusedFlags_RootAndChildWindows)
     and not ImGui.IsAnyItemActive(ctx) and ImGui.IsKeyPressed(ctx, ImGui.Key_Escape)
-  if ImGui.Button(ctx, "Close", w) or esc then UI.settings_open = false end
+  if esc then UI.settings_open = false end
   if own_bg then
     -- Title bar: big "Settings" on the left, the close X in the top-right corner (same size and
     -- margins as the main window's). Last item in the window; the cursor isn't moved back.
@@ -2508,6 +2603,7 @@ apply_imported_config = function(cfg)
   end
   if cfg.render_default then core.set_render_default(cfg.render_default) end
   tabs = cfg.tabs
+  UI.renew_tab_ids()
   for _, tab in ipairs(tabs.list) do tab.s.http_port = port end
   S = tabs.list[tabs.active].s
   core.http_port = S.http_port
@@ -2524,6 +2620,30 @@ local function show_tab(i)
   S.http_port = port
   tab_select_pending = true
   setup_switched()
+  settings_changed()
+end
+
+-- Tabs can be dragged to reorder them (ImGui's reorderable tab bar). ImGui keeps its own order
+-- for tab ids it has seen, so whenever we change the order ourselves (add, arrows, project switch,
+-- import) every tab gets a fresh id and ImGui lays them out in our order again. After a drag,
+-- our list is sorted to match where ImGui drew the tabs (UI.tab_x). Default always stays first.
+UI.tab_id_seq = 1000
+UI.renew_tab_ids = function()
+  for _, t in ipairs(tabs.list) do UI.tab_id_seq = UI.tab_id_seq + 1; t.id = UI.tab_id_seq end
+  UI.tab_x, UI.tab_sync = {}, nil
+end
+UI.sync_tab_order = function()
+  local x = UI.tab_x or {}
+  for i = 2, #tabs.list do if not x[tabs.list[i].id] then return end end
+  local rest = {}
+  for i = 2, #tabs.list do rest[#rest + 1] = tabs.list[i] end
+  table.sort(rest, function(a, b) return x[a.id] < x[b.id] end)
+  local changed = false
+  for k, t in ipairs(rest) do if tabs.list[k + 1] ~= t then changed = true end end
+  if not changed then return end
+  local showing = tabs.list[tabs.active]
+  for k, t in ipairs(rest) do tabs.list[k + 1] = t end
+  for k, t in ipairs(tabs.list) do if t == showing then tabs.active = k end end
   settings_changed()
 end
 
@@ -2544,11 +2664,12 @@ local function add_tab(from, at, name)
   tabs.next_id = tabs.next_id + 1
   table.insert(tabs.list, at, tab)
   if at <= tabs.active then tabs.active = tabs.active + 1 end
+  UI.renew_tab_ids()
   show_tab(at)
 end
 
 local function close_tab(i)
-  if #tabs.list < 2 or not tabs.list[i] then return end
+  if i < 2 or not tabs.list[i] then return end -- Default can't be closed
   table.remove(tabs.list, i)
   if i == tabs.active then
     show_tab(math.min(i, #tabs.list))
@@ -2561,27 +2682,32 @@ end
 
 local function move_tab(i, d)
   local j = i + d
-  if not tabs.list[i] or not tabs.list[j] then return end
+  if i < 2 or j < 2 or not tabs.list[i] or not tabs.list[j] then return end -- Default stays first
   tabs.list[i], tabs.list[j] = tabs.list[j], tabs.list[i]
   if tabs.active == i then tabs.active = j elseif tabs.active == j then tabs.active = i end
   -- ImGui keeps a tab bar's order once tabs exist; new ids make it lay them out again in our order.
-  for _, k in ipairs({ i, j }) do tabs.list[k].id = tabs.next_id; tabs.next_id = tabs.next_id + 1 end
+  UI.renew_tab_ids()
   tab_select_pending = true
   settings_changed()
 end
 
 local function section_tabs()
   local action
-  if ImGui.BeginTabBar(ctx, "setups", ImGui.TabBarFlags_FittingPolicyScroll) then
-    local can_close = #tabs.list > 1
+  if ImGui.BeginTabBar(ctx, "setups", ImGui.TabBarFlags_FittingPolicyScroll | UI.flag("TabBarFlags_Reorderable")) then
+    local dragging = false
+    UI.tab_x = UI.tab_x or {}
     for i, tab in ipairs(tabs.list) do
+      local can_close = i > 1 -- Default (always first) belongs to the project and stays
       local flags = (tab_select_pending and i == tabs.active) and ImGui.TabItemFlags_SetSelected or ImGui.TabItemFlags_None
+      if i == 1 then flags = flags | UI.flag("TabItemFlags_Leading") end -- can't be dragged, others can't pass it
       local label = tab.name .. "###tab" .. tab.id
       local sel, keep
       local pushed = push_tab_color(tab.color)
       if can_close then sel, keep = ImGui.BeginTabItem(ctx, label, true, flags)
       else sel = ImGui.BeginTabItem(ctx, label, nil, flags) end
       if pushed > 0 then ImGui.PopStyleColor(ctx, pushed) end
+      UI.tab_x[tab.id] = ImGui.GetItemRectMin(ctx)
+      if ImGui.IsItemActive(ctx) and ImGui.IsMouseDown(ctx, ImGui.MouseButton_Left) then dragging = true end
       if can_close and keep == false then action = { "close", i } end
       if ImGui.IsItemHovered(ctx) then
         if ImGui.IsMouseDoubleClicked(ctx, ImGui.MouseButton_Left) then action = { "rename", i }
@@ -2595,10 +2721,18 @@ local function section_tabs()
         ImGui.EndTabItem(ctx)
       end
     end
+    -- A couple of frames after a drag ends, take ImGui's new order into our list.
+    if dragging then UI.tab_sync = 2
+    elseif UI.tab_sync and not ImGui.IsMouseDown(ctx, ImGui.MouseButton_Left) then
+      UI.tab_sync = UI.tab_sync - 1
+      if UI.tab_sync <= 0 then UI.tab_sync = nil; UI.sync_tab_order() end
+    end
     if ImGui.TabItemButton(ctx, "+", ImGui.TabItemFlags_Trailing | ImGui.TabItemFlags_NoTooltip) then action = { "add" } end
     if ImGui.IsItemHovered(ctx) then
       ImGui.SetTooltip(ctx, "New tab, starting as a copy of this one.\n" ..
-        "Each tab keeps its own Wwise structure and settings.\nDouble-click a tab to rename it, right-click for its color, name and order.")
+        "Each tab keeps its own Wwise structure and settings. Default is this project's own setup;\n" ..
+        "the other tabs are shared presets, the same in every project.\n" ..
+        "Drag a tab to move it. Double-click a tab to rename it, right-click for its color, name and order.")
     end
     ImGui.EndTabBar(ctx)
   end
@@ -2637,7 +2771,7 @@ local function section_tabs()
       end
       enter = ImGui.IsItemDeactivatedAfterEdit(ctx) and ImGui.IsKeyPressed(ctx, ImGui.Key_Enter)
       ImGui.SameLine(ctx)
-      local can_close = #tabs.list > 1
+      local can_close = i > 1
       if not can_close then ImGui.BeginDisabled(ctx) end
       ImGui.PushStyleColor(ctx, ImGui.Col_Button, 0x8E2A2AFF)
       ImGui.PushStyleColor(ctx, ImGui.Col_ButtonHovered, 0xB23636FF)
@@ -2661,13 +2795,15 @@ local function section_tabs()
       ImGui.AlignTextToFramePadding(ctx)
       ImGui.TextColored(ctx, COLOR_DIM, "Tab order:")
       ImGui.SameLine(ctx)
-      if i == 1 then ImGui.BeginDisabled(ctx) end
+      -- Default stays first. Decided once, before the buttons can move the tab.
+      local no_left, no_right = i <= 2, i == 1 or i == #tabs.list
+      if no_left then ImGui.BeginDisabled(ctx) end
       if ImGui.ArrowButton(ctx, "##tableft", ImGui.Dir_Left) then move_tab(i, -1) end
-      if i == 1 then ImGui.EndDisabled(ctx) end
+      if no_left then ImGui.EndDisabled(ctx) end
       ImGui.SameLine(ctx)
-      if i == #tabs.list then ImGui.BeginDisabled(ctx) end
+      if no_right then ImGui.BeginDisabled(ctx) end
       if ImGui.ArrowButton(ctx, "##tabright", ImGui.Dir_Right) then move_tab(i, 1) end
-      if i == #tabs.list then ImGui.EndDisabled(ctx) end
+      if no_right then ImGui.EndDisabled(ctx) end
       if enter then ImGui.CloseCurrentPopup(ctx) end
     end
     ImGui.EndPopup(ctx)
@@ -2698,7 +2834,7 @@ local function section_tabs()
     if not tab then ImGui.CloseCurrentPopup(ctx)
     else
       ImGui.Text(ctx, "Close \"" .. tab.name .. "\"?")
-      ImGui.TextColored(ctx, COLOR_DIM, "Tabs are shared by every project, so it closes in all of them.")
+      ImGui.TextColored(ctx, COLOR_DIM, "It's a shared preset, so it closes in every project.")
       ImGui.TextColored(ctx, COLOR_DIM, "Its structure and settings go with it. Save them as presets first to keep them.")
       if ImGui.Button(ctx, "Close tab", 120) or ImGui.IsKeyPressed(ctx, ImGui.Key_Enter) then
         close_tab(tab_close); tab_close = nil; ImGui.CloseCurrentPopup(ctx)
@@ -2753,6 +2889,7 @@ local function follow_project_tab()
   dirty_settings = false
   cur_proj = proj
   tabs = core.load_tabs()
+  UI.renew_tab_ids()
   S = tabs.list[tabs.active].s
   core.http_port = S.http_port
   tab_select_pending = true

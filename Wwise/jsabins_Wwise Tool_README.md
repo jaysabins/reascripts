@@ -19,7 +19,7 @@ Wwise Tool is a free REAPER script by Jay Sabins, written in Lua with a ReaImGui
 - **Conflict handling.** Choose to reuse, replace or rename objects that already exist.
 - **SFX and Voice.** Import as Sound SFX or as Sound Voice in a chosen language.
 - **Originals location** with wildcards, and a folder picker for your Wwise project's Originals folder (SFX or any Voices language).
-- **Tabs.** Each tab along the top holds a whole setup (structure and settings) and can have its own color, so you can flick between, say, a weapons setup and a footsteps setup with one click. The tabs are the same in every project, and each project remembers its own settings in them.
+- **Tabs.** Each tab along the top holds a whole setup (structure and settings) and can have its own color, so you can flick between, say, a weapons setup and a footsteps setup with one click. The first tab, Default, is each project's own setup; the other tabs are shared presets you can use from any project.
 - **Two kinds of presets.** Structure presets hold just the Wwise structure; settings presets hold everything else. Load one without touching the other.
 - **One undo step.** Each transfer is a single undo in Wwise.
 - **Quick send.** A second action transfers with your last settings, without opening the window. Put it on a shortcut for one-key transfers.
@@ -93,13 +93,16 @@ The left panel's width can be changed: drag the edge between it and the preview.
 Under the toolbar is a row of tabs. Each tab is a complete setup: the Wwise structure, the destination, the source, the Originals location, the Renders location, the conflict and Initial Delay options, the Mono/Stereo, Streaming and Loop choices from the preview, and the Rendering, Channels, Transfer and Stream & loop options in **Settings**. Click a tab to switch to it; everything on the left and the preview change to that tab's setup. Only the connection port is shared by all tabs.
 
 - **+** adds a new tab that starts as a copy of the one showing.
+- **Drag** a tab left or right to change the order (Default always stays first).
 - **Double-click** a tab to rename it.
 - **Right-click** a tab to edit it: click the color swatch to give the tab its own color, type a new name, or **Close tab**. Underneath, **Reset color** goes back to the normal tab color, **Duplicate** adds a copy next to it, and the **Tab order** arrows move it left or right. New and duplicated tabs keep the color of the tab they were copied from.
-- Close a tab with its **x** (or middle-click it). You're asked first, because its setup goes with it, in every project. The last tab can't be closed.
+- Close a tab with its **x** (or middle-click it). You're asked first, because its setup goes with it, in every project. **Default** can't be closed or moved.
 
-The tabs themselves (names, colors, order, adding and closing) are the same in every REAPER project, so switching projects never makes a tab disappear. What's inside them is remembered per project: each project keeps its own settings in each tab and which tab it was showing, so when you come back to a project it opens the way you left it. A tab you haven't used in a project yet starts with the settings it was last edited with (in any project). **Quick send** uses the tab that was showing when you last used the window in that project.
+**Default** is always the first tab, and it belongs to the project: its setup is saved with the REAPER project, so each project opens with Default the way you left it there. A new project's Default starts from the last Default you used.
 
-Updating from a version before 1.24.0: the tabs of the first project you open become the shared list, and tabs from your other projects are added to it as you open them (a tab with the same name as one already there is treated as the same tab).
+Every other tab is a **shared preset**: the same in every project. Make a "Weapons" tab once and it's there in every project; edit it in one project and you'll see the change in all of them. Adding, closing, renaming, recoloring and reordering these tabs also applies everywhere. Each project remembers which tab it was showing, and **Quick send** uses that tab (with the shared tab's latest settings).
+
+Updating from 1.24.0 or earlier: a tab called Default becomes the project tab. If you didn't have one, a Default tab is added holding the setup each project was last using. Tabs from your other projects are added to the shared list as you open them (a tab with the same name as one already there is treated as the same tab).
 
 Presets still work inside a tab: loading a structure or settings preset changes the tab that's showing, and saving a preset saves from it.
 
@@ -107,7 +110,7 @@ Presets still work inside a tab: loading a structure or settings preset changes 
 
 There are two kinds of presets, so you can load one part of a setup without changing the rest:
 
-- **Structure presets...** (under **Wwise structure**) save just the structure: the levels, their names and property templates, and the Sound row (SFX or Voice, name, template and language).
+- **Structure presets** (the layers icon at the right end of the **Wwise structure** title) save just the structure: the levels, their names and property templates, and the Sound row (SFX or Voice, name, template and language).
 - **Settings presets...** (in **Settings > Configuration**) save everything else: the source, the destination, the Originals location, the Renders location, the conflict choice, the Initial Delay options, and the rendering and transfer options in **Settings**.
 
 In either popup, click a name under **Load** to load it. To save, type a name and click **Save** (an existing name is overwritten). To delete, type or load its name and click **Delete**.
@@ -148,14 +151,14 @@ The Sound's name comes from the item's take name (or the rendered file's name in
 
 This sets the containers that are created above each Sound, from the top down:
 
-- Click a row's **+** to add a level right below it (the **+** on the Sound row adds one just above the Sound), then choose its type: Actor-Mixer, Random Container, Sequence Container, Switch Container, Blend Container, Virtual Folder, Work Unit or Physical Folder.
+- Click **+ Add level** under the rows to add a level just above the Sound (drag it by its handle to move it), then choose its type: Actor-Mixer, Random Container, Sequence Container, Switch Container, Blend Container, Virtual Folder, Work Unit or Physical Folder.
 - Name each level. Names can use REAPER wildcards, and the **$** button inserts one. Every item gets its own name from the wildcard, so `$region` puts each item in a container named after its region.
 - The last row is the **Sound** itself. Choose **Sound SFX** or **Sound Voice** (pick a language for Voice). In Wwise 2025.1 and later both are simply called Sound. Leave its name empty to use the item's name.
-- Each row's type dropdown shows a colored dot and the type name in its color, the same color its tag uses in the preview. The **$**, template and **+** / **-** buttons stay faint until you point at the row. Colors: orange for Random Containers, purple for Blend Containers, blue for Sounds, and so on. You can pick your own colors in **Settings > Interface > Type colors**.
-- Click a row's **-** to remove that level. The **+** and **-** buttons sit on each row, so you always see which level they act on.
+- Each row's type shows its full name in its color, the same color its tag uses in the preview; click it to pick another type. The **$** and template buttons sit inside the end of the name field and stay faint until you point at the row. Colors: orange for Random Containers, purple for Blend Containers, blue for Sounds, and so on. You can pick your own colors in **Settings > Interface > Type colors**.
+- Point at a row and click the small **x** at its end to remove that level.
 - To move a level, drag the handle (three lines) at the left of its row onto another level.
 - Each row's clipboard button holds its property template. The clipboard is dim when no template is set and turns amber when one is. See [Property templates](#property-templates).
-- **Structure presets...** saves just the structure (the levels with their names and templates, and the Sound row with its type, name, template and language) under a name, and loads or deletes saved ones. Loading one changes only the structure. See [Presets](#presets).
+- **Structure presets** (the layers icon at the right end of the section's title line) saves just the structure (the levels with their names and templates, and the Sound row with its type, name, template and language) under a name, and loads or deletes saved ones. Loading one changes only the structure. See [Presets](#presets).
 
 If a level can't hold the level below it (for example a Random Container can't hold an Actor-Mixer), the problem is shown and Transfer stays greyed out until you fix it.
 
@@ -279,7 +282,7 @@ Afterwards a summary shows the destination, the number of files imported, object
 
 ## Settings
 
-The gear button opens **Settings** in its own window. The main window stays usable while Settings is open (it doesn't grey out), so you can change an option and watch the preview update. Settings' pages are listed down the left side; click one to show it on the right. The window keeps its size as you switch pages; drag its corner to make it bigger, and a long page scrolls. Close it with its **X**, the **Close** button or Esc.
+The gear button opens **Settings** in its own window. The main window stays usable while Settings is open (it doesn't grey out), so you can change an option and watch the preview update. Settings' pages are listed down the left side; click one to show it on the right. The window keeps its size as you switch pages; drag its corner to make it bigger, and a long page scrolls. Close it with its **X** or Esc. Clicking the gear while Settings is already open brings it to the front.
 
 **Settings > Appearance** changes the window's look: the color of the big title, the text, the dim help text and the window background; how rounded the window corners and the buttons, fields and panels are; and the font (Verdana by default), its text size and the title and heading size. Colors and corners change right away; a new font shows the next time you open Wwise Tool. **Reset appearance** goes back to the defaults. The appearance applies to every project and is included in **Export configuration**.
 
