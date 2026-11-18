@@ -8,7 +8,7 @@ local r = reaper
 local script_dir = debug.getinfo(1, "S").source:match("^@?(.*[\\/])") or ""
 local core = dofile(script_dir .. "jsabins_WwiseTool_core.lua")
 
-local s = core.load_settings()
+local s = core.load_active_settings()
 core.http_port = s.http_port
 
 local summary = core.transfer(s)

@@ -1,13 +1,15 @@
 -- @description Wwise Tool (send REAPER audio to Wwise)
 -- @author Jay Sabins
--- @version 1.24.0
+-- @version 1.25.0
 -- @changelog
---   Tabs are now the same in every project. Adding, closing, renaming, recoloring or
---   reordering a tab does it everywhere, and switching projects no longer swaps the tab list.
---   Each project still remembers which tab it was on and its own settings in each tab, so a
---   project opens the way you left it. A tab you haven't used in a project yet starts with that
---   tab's last-edited settings. The first time, tabs from your other projects are added to the
---   shared list (matched by name), so none are lost.
+--   Tabs are now shared presets: an edit to a tab like "Weapons" in one project shows up in
+--   every project. The Default tab (always first) is each project's own setup instead, so a
+--   project opens with Default the way you left it there. A new project's Default starts from
+--   the last Default you used. Each project still opens on the tab it was showing.
+--   Default can't be closed or moved; the other tabs can.
+--   Quick send uses the shared tab's latest settings.
+--   Coming from 1.24.0: a tab named Default becomes the project tab; if there isn't one, a
+--   Default tab is added with the setup each project was last using.
 -- @provides
 --   [main] jsabins_Wwise Tool - Quick send.lua
 --   [nomain] jsabins_WwiseTool_core.lua
@@ -25,7 +27,7 @@
 --     Work Units) named with REAPER wildcards like $region, $track, $item.
 --   - Property templates per level, Sound SFX or Sound Voice (with language),
 --     Originals location (wildcards allowed).
---   - Tabs, each a whole setup you can flick between, shared by every project (each project keeps its own settings per tab). Conflict handling, structure and settings presets, export/import of the whole configuration, live preview (new vs existing objects),
+--   - Tabs, each a whole setup you can flick between, shared by every project as presets, plus a Default tab that is each project's own setup. Conflict handling, structure and settings presets, export/import of the whole configuration, live preview (new vs existing objects),
 --     transfer summary. One Wwise undo step per transfer.
 --   - Auto mono/stereo: a Sound whose left and right match is made mono
 --     (also for folder items). Click the preview's Channels column to force
@@ -2548,7 +2550,7 @@ local function add_tab(from, at, name)
 end
 
 local function close_tab(i)
-  if #tabs.list < 2 or not tabs.list[i] then return end
+  if i < 2 or not tabs.list[i] then return end -- Default can't be closed
   table.remove(tabs.list, i)
   if i == tabs.active then
     show_tab(math.min(i, #tabs.list))
@@ -2561,7 +2563,7 @@ end
 
 local function move_tab(i, d)
   local j = i + d
-  if not tabs.list[i] or not tabs.list[j] then return end
+  if i < 2 or j < 2 or not tabs.list[i] or not tabs.list[j] then return end -- Default stays first
   tabs.list[i], tabs.list[j] = tabs.list[j], tabs.list[i]
   if tabs.active == i then tabs.active = j elseif tabs.active == j then tabs.active = i end
   -- ImGui keeps a tab bar's order once tabs exist; new ids make it lay them out again in our order.
@@ -2573,8 +2575,8 @@ end
 local function section_tabs()
   local action
   if ImGui.BeginTabBar(ctx, "setups", ImGui.TabBarFlags_FittingPolicyScroll) then
-    local can_close = #tabs.list > 1
     for i, tab in ipairs(tabs.list) do
+      local can_close = i > 1 -- Default (always first) belongs to the project and stays
       local flags = (tab_select_pending and i == tabs.active) and ImGui.TabItemFlags_SetSelected or ImGui.TabItemFlags_None
       local label = tab.name .. "###tab" .. tab.id
       local sel, keep
@@ -2598,7 +2600,9 @@ local function section_tabs()
     if ImGui.TabItemButton(ctx, "+", ImGui.TabItemFlags_Trailing | ImGui.TabItemFlags_NoTooltip) then action = { "add" } end
     if ImGui.IsItemHovered(ctx) then
       ImGui.SetTooltip(ctx, "New tab, starting as a copy of this one.\n" ..
-        "Each tab keeps its own Wwise structure and settings.\nDouble-click a tab to rename it, right-click for its color, name and order.")
+        "Each tab keeps its own Wwise structure and settings. Default is this project's own setup;\n" ..
+        "the other tabs are shared presets, the same in every project.\n" ..
+        "Double-click a tab to rename it, right-click for its color, name and order.")
     end
     ImGui.EndTabBar(ctx)
   end
@@ -2637,7 +2641,7 @@ local function section_tabs()
       end
       enter = ImGui.IsItemDeactivatedAfterEdit(ctx) and ImGui.IsKeyPressed(ctx, ImGui.Key_Enter)
       ImGui.SameLine(ctx)
-      local can_close = #tabs.list > 1
+      local can_close = i > 1
       if not can_close then ImGui.BeginDisabled(ctx) end
       ImGui.PushStyleColor(ctx, ImGui.Col_Button, 0x8E2A2AFF)
       ImGui.PushStyleColor(ctx, ImGui.Col_ButtonHovered, 0xB23636FF)
@@ -2661,13 +2665,15 @@ local function section_tabs()
       ImGui.AlignTextToFramePadding(ctx)
       ImGui.TextColored(ctx, COLOR_DIM, "Tab order:")
       ImGui.SameLine(ctx)
-      if i == 1 then ImGui.BeginDisabled(ctx) end
+      -- Default stays first. Decided once, before the buttons can move the tab.
+      local no_left, no_right = i <= 2, i == 1 or i == #tabs.list
+      if no_left then ImGui.BeginDisabled(ctx) end
       if ImGui.ArrowButton(ctx, "##tableft", ImGui.Dir_Left) then move_tab(i, -1) end
-      if i == 1 then ImGui.EndDisabled(ctx) end
+      if no_left then ImGui.EndDisabled(ctx) end
       ImGui.SameLine(ctx)
-      if i == #tabs.list then ImGui.BeginDisabled(ctx) end
+      if no_right then ImGui.BeginDisabled(ctx) end
       if ImGui.ArrowButton(ctx, "##tabright", ImGui.Dir_Right) then move_tab(i, 1) end
-      if i == #tabs.list then ImGui.EndDisabled(ctx) end
+      if no_right then ImGui.EndDisabled(ctx) end
       if enter then ImGui.CloseCurrentPopup(ctx) end
     end
     ImGui.EndPopup(ctx)
@@ -2698,7 +2704,7 @@ local function section_tabs()
     if not tab then ImGui.CloseCurrentPopup(ctx)
     else
       ImGui.Text(ctx, "Close \"" .. tab.name .. "\"?")
-      ImGui.TextColored(ctx, COLOR_DIM, "Tabs are shared by every project, so it closes in all of them.")
+      ImGui.TextColored(ctx, COLOR_DIM, "It's a shared preset, so it closes in every project.")
       ImGui.TextColored(ctx, COLOR_DIM, "Its structure and settings go with it. Save them as presets first to keep them.")
       if ImGui.Button(ctx, "Close tab", 120) or ImGui.IsKeyPressed(ctx, ImGui.Key_Enter) then
         close_tab(tab_close); tab_close = nil; ImGui.CloseCurrentPopup(ctx)
