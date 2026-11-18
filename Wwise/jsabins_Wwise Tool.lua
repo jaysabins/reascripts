@@ -8,6 +8,8 @@
 --   the last Default you used. Each project still opens on the tab it was showing.
 --   Default can't be closed or moved; the other tabs can.
 --   Drag a tab left or right to change the tab order (the right-click arrows still work).
+--   Settings: the Close button at the bottom is gone (use the X or Esc). Clicking the gear
+--   while Settings is open brings the Settings window to the front.
 --   Quick send uses the shared tab's latest settings.
 --   Coming from 1.24.0: a tab named Default becomes the project tab; if there isn't one, a
 --   Default tab is added with the setup each project was last using.
@@ -2301,9 +2303,15 @@ local function settings_window()
   if open_settings then
     open_settings = false
     UI.settings_open = true
-    ImGui.SetNextWindowFocus(ctx) -- clicking the gear again brings it to the front
+    UI.settings_focus = 3
   end
   if not UI.settings_open then return end
+  -- Clicking the gear while Settings is open brings it to the front. Asked for a few frames,
+  -- because the click itself focuses the main window first.
+  if UI.settings_focus then
+    ImGui.SetNextWindowFocus(ctx)
+    UI.settings_focus = UI.settings_focus > 1 and UI.settings_focus - 1 or nil
+  end
   ImGui.SetNextWindowSize(ctx, 720, 460, ImGui.Cond_FirstUseEver)
   ImGui.SetNextWindowSizeConstraints(ctx, 520, 300, 3000, 3000)
   -- Same look as the main window when floating: big rounded corners, one solid #191919 shape
@@ -2362,13 +2370,10 @@ local function settings_window()
 
   ImGui.Separator(ctx)
   ImGui.TextDisabled(ctx, "Wwise Tool " .. core.VERSION)
-  ImGui.SameLine(ctx)
-  local w = 80
-  local avail = ImGui.GetContentRegionAvail(ctx)
-  if avail > w then ImGui.SetCursorPosX(ctx, ImGui.GetCursorPosX(ctx) + avail - w) end
+  -- No Close button (the X in the corner does it); Esc still closes.
   local esc = ImGui.IsWindowFocused(ctx, ImGui.FocusedFlags_RootAndChildWindows)
     and not ImGui.IsAnyItemActive(ctx) and ImGui.IsKeyPressed(ctx, ImGui.Key_Escape)
-  if ImGui.Button(ctx, "Close", w) or esc then UI.settings_open = false end
+  if esc then UI.settings_open = false end
   if own_bg then
     -- Title bar: big "Settings" on the left, the close X in the top-right corner (same size and
     -- margins as the main window's). Last item in the window; the cursor isn't moved back.
