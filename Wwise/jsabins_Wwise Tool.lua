@@ -10,6 +10,9 @@
 --   Drag a tab left or right to change the tab order (the right-click arrows still work).
 --   Structure presets moved from the button under the rows to a flat layers icon at the end of
 --   the "Wwise structure" title line (same Load / Save popup).
+--   Wwise structure rows show short type names (Property, Random, Blend, Virtual...) without the
+--   dropdown arrow, so names aren't cut off and the name field is wider. The list and the
+--   tooltip still show the full names.
 --   Settings: the Close button at the bottom is gone (use the X or Esc). Clicking the gear
 --   while Settings is open brings the Settings window to the front.
 --   Quick send uses the shared tab's latest settings.
@@ -71,6 +74,11 @@ local ctx = ImGui.CreateContext("Wwise Tool")
 -- If the font can't be made, the header just uses the normal font.
 -- Layout constants live in one table: the main chunk is at Lua's 200-locals limit.
 local UI = {}
+-- An ImGui flag by name, or 0 when this ReaImGui version doesn't have it.
+UI.flag = function(name)
+  local ok, v = pcall(function() return ImGui[name] end)
+  return ok and type(v) == "number" and v or 0
+end
 -- Look of the window, set in Settings > Appearance (saved with the other window settings, in
 -- view.look). Colors are 0xRRGGBBAA; nil means the built-in default. Fonts are made once at
 -- startup, so font changes apply the next time the window opens; everything else applies live.
@@ -1189,6 +1197,22 @@ end
 
 -- Wwise structure type dropdown: grey frame with a colored dot and the type name in its color
 -- drawn over it (the combo's own preview is left empty). Each choice in the list is in its color.
+-- The row shows a short name (the dot tells the types apart); the list and the tooltip show
+-- the full one. No arrow box, so the row has room for the name field.
+UI.SHORT_TYPE = { ["Property Container"] = "Property", ["Random Container"] = "Random",
+  ["Sequence Container"] = "Sequence", ["Switch Container"] = "Switch", ["Blend Container"] = "Blend",
+  ["Virtual Folder"] = "Virtual", ["Physical Folder"] = "Physical" }
+UI.short_type = function(label) return UI.SHORT_TYPE[label] or label end
+UI.TYPE_COMBO_FLAGS = UI.flag("ComboFlags_NoArrowButton")
+-- Width of a type dropdown that fits the longest short name in `labels`.
+UI.type_combo_w = function(labels)
+  local h = ImGui.GetFrameHeight(ctx)
+  local pad_x = ImGui.GetStyleVar(ctx, ImGui.StyleVar_FramePadding)
+  local r = math.max(2.5, math.floor(h * 0.17 + 0.5))
+  local tw = 0
+  for _, l in ipairs(labels) do tw = math.max(tw, (ImGui.CalcTextSize(ctx, UI.short_type(l)))) end
+  return math.floor(pad_x * 2 + r * 2 + 5 + tw + (UI.TYPE_COMBO_FLAGS ~= 0 and 2 or h) + 0.5)
+end
 UI.type_combo = function(id, items, value, w, color_of)
   local x, y = ImGui.GetCursorScreenPos(ctx)
   local h = ImGui.GetFrameHeight(ctx)
@@ -1196,7 +1220,7 @@ UI.type_combo = function(id, items, value, w, color_of)
   for _, it in ipairs(items) do if it[1] == value then label = it[2] end end
   local changed, new = false, value
   ImGui.SetNextItemWidth(ctx, w)
-  if ImGui.BeginCombo(ctx, id, "") then
+  if ImGui.BeginCombo(ctx, id, "", UI.TYPE_COMBO_FLAGS) then
     for _, it in ipairs(items) do
       local ic = color_of(it[1])
       if ic then ImGui.PushStyleColor(ctx, ImGui.Col_Text, ic) end
@@ -1205,15 +1229,16 @@ UI.type_combo = function(id, items, value, w, color_of)
     end
     ImGui.EndCombo(ctx)
   end
+  if ImGui.IsItemHovered(ctx) and UI.short_type(label) ~= label then ImGui.SetTooltip(ctx, label) end
   local dl = ImGui.GetWindowDrawList(ctx)
   local pad_x = ImGui.GetStyleVar(ctx, ImGui.StyleVar_FramePadding)
   local col = color_of(new) or ImGui.GetColor(ctx, ImGui.Col_Text)
   local r = math.max(2.5, math.floor(h * 0.17 + 0.5))
   local cx, cy = x + pad_x + r, y + h / 2
   ImGui.DrawList_AddCircleFilled(dl, cx, cy, r, col)
-  for _, it in ipairs(items) do if it[1] == new then label = it[2] end end
+  for _, it in ipairs(items) do if it[1] == new then label = UI.short_type(it[2]) end end
   local _, th = ImGui.CalcTextSize(ctx, label)
-  ImGui.DrawList_PushClipRect(dl, x, y, x + w - h, y + h, true)
+  ImGui.DrawList_PushClipRect(dl, x, y, x + w - (UI.TYPE_COMBO_FLAGS ~= 0 and 2 or h), y + h, true)
   ImGui.DrawList_AddText(dl, cx + r + 5, y + (h - th) / 2, col, label)
   ImGui.DrawList_PopClipRect(dl)
   return changed, new
@@ -1253,7 +1278,9 @@ local function section_hierarchy()
   local sp = ImGui.GetStyleVar(ctx, ImGui.StyleVar_ItemSpacing)
   local act = {}
   local avail = ImGui.GetContentRegionAvail(ctx)
-  local type_w = 150
+  local type_labels = { "Sound SFX", "Sound Voice" }
+  for _, t in ipairs(core.CONTAINER_TYPES) do type_labels[#type_labels + 1] = core.type_label(t) end
+  local type_w = UI.type_combo_w(type_labels)
   local name_w = math.max(60, avail - 12 - type_w - sq * 4 - UI.PM_GAP - sp * 5)
   local hover_next = nil
   local mx, my = ImGui.GetMousePos(ctx)
@@ -2575,10 +2602,6 @@ end
 -- for tab ids it has seen, so whenever we change the order ourselves (add, arrows, project switch,
 -- import) every tab gets a fresh id and ImGui lays them out in our order again. After a drag,
 -- our list is sorted to match where ImGui drew the tabs (UI.tab_x). Default always stays first.
-UI.flag = function(name)
-  local ok, v = pcall(function() return ImGui[name] end)
-  return ok and type(v) == "number" and v or 0
-end
 UI.tab_id_seq = 1000
 UI.renew_tab_ids = function()
   for _, t in ipairs(tabs.list) do UI.tab_id_seq = UI.tab_id_seq + 1; t.id = UI.tab_id_seq end
