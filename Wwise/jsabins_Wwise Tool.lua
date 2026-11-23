@@ -2,6 +2,10 @@
 -- @author Jay Sabins
 -- @version 1.26.0
 -- @changelog
+--   Fixed: with an Originals location set, transfers could put the audio in extra folders
+--   named "@_01", "@_02"... inside it (one per Sound with the same path). Those were a
+--   placeholder the tool uses to read REAPER's wildcards, plus the number REAPER adds to
+--   keep repeated names apart; it now strips them whatever form REAPER's number takes.
 --   Fixed: with the tool open, selecting or moving items (folder items especially) filled
 --   REAPER's undo history with "Unselect all tracks" steps, so undoing a move took many
 --   presses. The preview now puts the track and item selection back without running an
