@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Jay Sabins Scripts" commit="b0add7f923edb58825079346b8f1b9f1b4e65b0e">
+<index version="1" name="Jay Sabins Scripts" commit="4a2cfb0e06dc324fb296d38b8ea4996308a0f24b">
   <category name="Batch Tools">
     <reapack name="jsabins_Folder_Batch.lua" type="script" desc="Folder Batch Processor">
       <metadata>
@@ -867,6 +867,19 @@ preview shows "kept").]]></changelog>
         <source main="main">https://github.com/jaysabins/reascripts/raw/b0add7f923edb58825079346b8f1b9f1b4e65b0e/Wwise/jsabins_Wwise%20Tool.lua</source>
         <source main="main" file="jsabins_Wwise Tool - Quick send.lua">https://github.com/jaysabins/reascripts/raw/b0add7f923edb58825079346b8f1b9f1b4e65b0e/Wwise/jsabins_Wwise%20Tool%20-%20Quick%20send.lua</source>
         <source file="jsabins_WwiseTool_core.lua">https://github.com/jaysabins/reascripts/raw/b0add7f923edb58825079346b8f1b9f1b4e65b0e/Wwise/jsabins_WwiseTool_core.lua</source>
+      </version>
+      <version name="1.28.0" author="Jay Sabins" time="2026-11-23T19:49:30Z">
+        <changelog><![CDATA[The preview's Originals file column shows whether each WAV replaces a file already in
+the Wwise project's Originals folder (orange) or is a new file (green). Hover a file for
+the full path and which it is; hover the column header for the key.
+Set Initial Delay from layer timing now handles partial shots (e.g. sending only the
+Tail again): the shot is measured from its other layers on the timeline (tracks in the
+same folder) even when they aren't selected. If they aren't on the timeline either, the
+first selected layer keeps the Initial Delay it already has in Wwise instead of 0 (the
+preview shows "kept").]]></changelog>
+        <source main="main">https://github.com/jaysabins/reascripts/raw/4a2cfb0e06dc324fb296d38b8ea4996308a0f24b/Wwise/jsabins_Wwise%20Tool.lua</source>
+        <source main="main" file="jsabins_Wwise Tool - Quick send.lua">https://github.com/jaysabins/reascripts/raw/4a2cfb0e06dc324fb296d38b8ea4996308a0f24b/Wwise/jsabins_Wwise%20Tool%20-%20Quick%20send.lua</source>
+        <source file="jsabins_WwiseTool_core.lua">https://github.com/jaysabins/reascripts/raw/4a2cfb0e06dc324fb296d38b8ea4996308a0f24b/Wwise/jsabins_WwiseTool_core.lua</source>
       </version>
     </reapack>
   </category>
