@@ -1,24 +1,21 @@
 -- @description Wwise Tool (send REAPER audio to Wwise)
 -- @author Jay Sabins
--- @version 1.25.0
+-- @version 1.26.0
 -- @changelog
---   Tabs are now shared presets: an edit to a tab like "Weapons" in one project shows up in
---   every project. The Default tab (always first) is each project's own setup instead, so a
---   project opens with Default the way you left it there. A new project's Default starts from
---   the last Default you used. Each project still opens on the tab it was showing.
---   Default can't be closed or moved; the other tabs can.
---   Drag a tab left or right to change the tab order (the right-click arrows still work).
---   Structure presets moved from the button under the rows to a flat layers icon at the end of
---   the "Wwise structure" title line (same Load / Save popup).
---   Wwise structure rows have more room for names: the type shows as its full name in its
---   color (no dot or arrow box) in a column as wide as the longest name; $ and the property
---   template button sit inside the end of the name field; a small x on the hovered row removes
---   a level, and "+ Add level" under the rows adds one (drag a level by its handle to move it).
---   Settings: the Close button at the bottom is gone (use the X or Esc). Clicking the gear
---   while Settings is open brings the Settings window to the front.
---   Quick send uses the shared tab's latest settings.
---   Coming from 1.24.0: a tab named Default becomes the project tab; if there isn't one, a
---   Default tab is added with the setup each project was last using.
+--   Fixed: with an Originals location set, transfers could put the audio in extra folders
+--   named "@_01", "@_02"... inside it (one per Sound with the same path). Those were a
+--   placeholder the tool uses to read REAPER's wildcards, plus the number REAPER adds to
+--   keep repeated names apart; it now strips them whatever form REAPER's number takes.
+--   Fixed: with the tool open, selecting or moving items (folder items especially) filled
+--   REAPER's undo history with "Unselect all tracks" steps, so undoing a move took many
+--   presses. The preview now puts the track and item selection back without running an
+--   action, so it adds nothing to the undo history.
+--   Destination: a clock button after From Wwise lists recent destinations (places you sent
+--   to or picked with From Wwise, newest first, for the connected Wwise project). Click one
+--   to use it; "Clear this list" empties it.
+--   Destination field: a path too long for the field shows its end (the start is cut off),
+--   like the preview's Originals file column. Hover it to scroll back and forth; click it to
+--   edit as usual.
 -- @provides
 --   [main] jsabins_Wwise Tool - Quick send.lua
 --   [nomain] jsabins_WwiseTool_core.lua
@@ -444,6 +441,112 @@ local function input(label, value, hint, width)
   else changed, v = ImGui.InputText(ctx, label, value or "") end
   if changed then settings_changed() end
   return v
+end
+
+-- Text field that shows the END of its text when it's too long for the field (the start is cut
+-- off instead), like the preview's Originals file column. Hovering scrolls it back and forth.
+-- While you type in it, it's a normal text field.
+UI.tail_active = {}
+UI.tail_input = function(label, value, hint, width)
+  value = value or ""
+  local px, py = ImGui.GetStyleVar(ctx, ImGui.StyleVar_FramePadding)
+  local over = ImGui.CalcTextSize(ctx, value) - ((width or 200) - 2 * px)
+  local overlay = not UI.tail_active[label] and value ~= "" and over > 0
+  if overlay then ImGui.PushStyleColor(ctx, ImGui.Col_Text, 0x00000000) end
+  local v = input(label, value, hint, width)
+  if overlay then ImGui.PopStyleColor(ctx) end
+  UI.tail_active[label] = ImGui.IsItemActive(ctx)
+  if overlay and not UI.tail_active[label] then
+    local hovered = ImGui.IsItemHovered(ctx)
+    local x1, y1 = ImGui.GetItemRectMin(ctx)
+    local x2, y2 = ImGui.GetItemRectMax(ctx)
+    local off = UI.tail_offset(label .. "|" .. value, over, hovered)
+    ImGui.PushClipRect(ctx, x1 + px, y1, x2 - px, y2, true)
+    ImGui.DrawList_AddText(ImGui.GetWindowDrawList(ctx), x1 + px - off, y1 + py, ImGui.GetColor(ctx, ImGui.Col_Text), value)
+    ImGui.PopClipRect(ctx)
+  end
+  return v
+end
+
+-- Recent Wwise destinations (newest first), kept for every project in ExtState "dest_history".
+-- Each entry remembers its Wwise project, so the list shows the connected project's ones.
+UI.DEST_HISTORY_MAX = 15
+UI.dest_history = function()
+  if not UI.dest_hist then
+    local ok, t = pcall(core.json.decode, r.GetExtState(core.EXT, "dest_history"))
+    UI.dest_hist = (ok and type(t) == "table") and t or {}
+  end
+  return UI.dest_hist
+end
+UI.dest_wproj = function() return (conn and conn.project_path or ""):lower() end
+UI.save_dest_history = function()
+  r.SetExtState(core.EXT, "dest_history", core.json.encode(UI.dest_history()), true)
+end
+UI.remember_dest = function(p)
+  if type(p) ~= "string" or p == "" then return end
+  local list, w = UI.dest_history(), UI.dest_wproj()
+  for i = #list, 1, -1 do
+    local e = list[i]
+    if type(e) ~= "table" or (e.w == w and tostring(e.p):lower() == p:lower()) then table.remove(list, i) end
+  end
+  table.insert(list, 1, { p = p, w = w })
+  -- Keep the newest few per Wwise project.
+  local per = {}
+  for i = 1, #list do
+    local k = list[i].w or ""
+    per[k] = (per[k] or 0) + 1
+    if per[k] > UI.DEST_HISTORY_MAX then list[i] = false end
+  end
+  for i = #list, 1, -1 do if not list[i] then table.remove(list, i) end end
+  UI.save_dest_history()
+end
+-- The entries to show: the connected Wwise project's (all of them when not connected).
+UI.dest_history_shown = function()
+  local out, w = {}, UI.dest_wproj()
+  for _, e in ipairs(UI.dest_history()) do
+    if type(e) == "table" and type(e.p) == "string" and (w == "" or e.w == w or (e.w or "") == "") then out[#out + 1] = e end
+  end
+  return out
+end
+-- Clock icon: the recent-destinations button.
+UI.draw_history = function(dl, x1, y1, size, fg)
+  local cx, cy = x1 + size / 2, y1 + size / 2
+  local rad = size * 0.30
+  local th = math.max(1.2, size * 0.065)
+  ImGui.DrawList_AddCircle(dl, cx, cy, rad, fg, 0, th)
+  ImGui.DrawList_AddLine(dl, cx, cy + th * 0.3, cx, cy - rad * 0.62, fg, th)
+  ImGui.DrawList_AddLine(dl, cx - th * 0.3, cy, cx + rad * 0.5, cy, fg, th)
+end
+-- Clock button after From Wwise: a list of recent destinations to pick from.
+UI.history_button = function(size)
+  ImGui.SameLine(ctx)
+  if title_icon_button("##desthist", size, UI.draw_history) then ImGui.OpenPopup(ctx, "desthistpop") end
+  if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Recent destinations") end
+  if ImGui.BeginPopup(ctx, "desthistpop") then
+    local shown = UI.dest_history_shown()
+    if #shown == 0 then
+      ImGui.TextDisabled(ctx, "No recent destinations yet.\nPlaces you send to, or pick with From Wwise, show up here.")
+    else
+      ImGui.TextDisabled(ctx, "Recent destinations")
+      ImGui.Separator(ctx)
+    end
+    local picked
+    for i, e in ipairs(shown) do
+      if ImGui.Selectable(ctx, e.p .. "##dh" .. i, e.p == S.destination) then picked = e.p end
+    end
+    if #shown > 0 then
+      ImGui.Separator(ctx)
+      if ImGui.Selectable(ctx, "Clear this list") then
+        local list, w = UI.dest_history(), UI.dest_wproj()
+        for i = #list, 1, -1 do
+          if type(list[i]) ~= "table" or w == "" or list[i].w == w or (list[i].w or "") == "" then table.remove(list, i) end
+        end
+        UI.save_dest_history()
+      end
+    end
+    ImGui.EndPopup(ctx)
+    if picked then S.destination = picked; UI.remember_dest(picked); settings_changed() end
+  end
 end
 
 local function wildcard_menu(id, apply, ghost, size, tight)
@@ -967,8 +1070,9 @@ local function section_destination()
     ImGui.Text(ctx, wwise_sel_path or "(nothing selected in Wwise)")
     ImGui.PopTextWrapPos(ctx)
   else
-    S.destination = input("##dest", S.destination, "\\Containers\\Default Work Unit", fw)
-    from_wwise_button("dest", function(p) S.destination = p end, sq)
+    S.destination = UI.tail_input("##dest", S.destination, "\\Containers\\Default Work Unit", fw)
+    from_wwise_button("dest", function(p) S.destination = p; UI.remember_dest(p) end, sq)
+    UI.history_button(sq)
   end
   ImGui.Dummy(ctx, 0, 2)
   dim_label("Originals location")
@@ -1679,6 +1783,26 @@ local function cell_clip_right(x, y)
   return lo
 end
 
+-- How far to shift text that is `over` pixels too wide: its end shows, and while hovered it
+-- scrolls slowly back and forth. key tells texts apart (the hovered one restarts at its end).
+UI.tail_offset = function(key, over, hovered)
+  if over <= 0 then
+    if not hovered and UI.tail_key == key then UI.tail_key = nil end
+    return 0
+  end
+  if not hovered then
+    if UI.tail_key == key then UI.tail_key = nil end
+    return over -- show the end
+  end
+  if UI.tail_key ~= key then UI.tail_key, UI.tail_t0 = key, ImGui.GetTime(ctx) end
+  local d, p = over / UI.TAIL_SPEED, UI.TAIL_PAUSE
+  local u = (ImGui.GetTime(ctx) - UI.tail_t0) % (2 * (d + p))
+  if u < p then return over
+  elseif u < p + d then return over - (u - p) * UI.TAIL_SPEED
+  elseif u < 2 * p + d then return 0 end
+  return (u - 2 * p - d) * UI.TAIL_SPEED
+end
+
 -- col_id: the column's id, so its right edge can be read from UI.col_x2 (recorded from the
 -- header row). Inside a table cell GetContentRegionAvail doesn't stop at the column edge.
 local function tail_text(text, col, tip, col_id)
@@ -1694,21 +1818,7 @@ local function tail_text(text, col, tip, col_id)
   local tw = ImGui.CalcTextSize(ctx, text)
   ImGui.Dummy(ctx, avail, h)
   local hovered = ImGui.IsItemHovered(ctx)
-  local off = 0
-  if tw > avail then
-    local over = tw - avail
-    off = over -- show the end
-    if hovered then
-      if UI.tail_key ~= text then UI.tail_key, UI.tail_t0 = text, ImGui.GetTime(ctx) end
-      local d, p = over / UI.TAIL_SPEED, UI.TAIL_PAUSE
-      local u = (ImGui.GetTime(ctx) - UI.tail_t0) % (2 * (d + p))
-      if u < p then off = over
-      elseif u < p + d then off = over - (u - p) * UI.TAIL_SPEED
-      elseif u < 2 * p + d then off = 0
-      else off = (u - 2 * p - d) * UI.TAIL_SPEED end
-    end
-  end
-  if not hovered and UI.tail_key == text then UI.tail_key = nil end
+  local off = UI.tail_offset(text, tw - avail, hovered)
   ImGui.PushClipRect(ctx, x, y, x + avail, y + h, true)
   ImGui.DrawList_AddText(ImGui.GetWindowDrawList(ctx), x - off, y, col, text)
   ImGui.PopClipRect(ctx)
@@ -1941,6 +2051,7 @@ local function do_transfer()
     last_transfer_end = r.time_precise()
     note("transfer " .. string.format("%.0fms", (summary.seconds or 0) * 1000))
     if summary.plan and summary.imported > 0 then
+      UI.remember_dest(summary.plan.destination)
       if known_dest ~= summary.plan.destination then known_existing, known_dest = {}, summary.plan.destination end
       core.remember_transfer(summary.plan, known_existing)
     end

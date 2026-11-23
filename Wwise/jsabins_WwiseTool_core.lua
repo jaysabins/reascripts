@@ -1009,12 +1009,29 @@ local function set_s(k, v) r.GetSetProjectInfo_String(0, k, v, true) end
 local function get_n(k) return r.GetSetProjectInfo(0, k, 0, false) end
 local function set_n(k, v) r.GetSetProjectInfo(0, k, v, true) end
 
+-- Selected tracks, master included (GetSelectedTrack2 where REAPER has it).
+function M.selected_tracks()
+  local out = {}
+  if r.CountSelectedTracks2 and r.GetSelectedTrack2 then
+    for i = 0, r.CountSelectedTracks2(0, true) - 1 do out[#out + 1] = r.GetSelectedTrack2(0, i, true) end
+  else
+    for i = 0, r.CountSelectedTracks(0) - 1 do out[#out + 1] = r.GetSelectedTrack(0, i) end
+  end
+  return out
+end
+
+local function same_list(a, b)
+  if #a ~= #b then return false end
+  for i = 1, #a do if a[i] ~= b[i] then return false end end
+  return true
+end
+
 local function snapshot()
   local s = { num = {}, str = {}, items = {}, tracks = {}, names = {} }
   for _, k in ipairs(NUM_KEYS) do s.num[k] = get_n(k) end
   for _, k in ipairs(STR_KEYS) do s.str[k] = get_s(k) end
   for i = 0, r.CountSelectedMediaItems(0) - 1 do s.items[#s.items + 1] = r.GetSelectedMediaItem(0, i) end
-  for i = 0, r.CountSelectedTracks(0) - 1 do s.tracks[#s.tracks + 1] = r.GetSelectedTrack(0, i) end
+  s.tracks = M.selected_tracks()
   s.cursor = r.GetCursorPosition()
   return s
 end
@@ -1035,10 +1052,20 @@ local function restore(s)
   end
   for k, v in pairs(s.num) do if get_n(k) ~= v then set_n(k, v) end end
   for k, v in pairs(s.str) do if get_s(k) ~= v then set_s(k, v) end end
-  select_items(s.items)
-  r.Main_OnCommand(40297, 0) -- Track: Unselect all tracks
-  for _, tr in ipairs(s.tracks) do r.SetTrackSelected(tr, true) end
-  r.SetEditCurPos(s.cursor, false, false)
+  -- Put the selection back with API calls only, and only when it really changed. Never run
+  -- an action here (like "Track: Unselect all tracks"): REAPER adds an undo point for every
+  -- action run, and the preview rebuilds after each edit, which flooded the undo history.
+  local now_items = {}
+  for i = 0, r.CountSelectedMediaItems(0) - 1 do now_items[#now_items + 1] = r.GetSelectedMediaItem(0, i) end
+  if not same_list(now_items, s.items) then select_items(s.items) end
+  local now_tracks = M.selected_tracks()
+  if not same_list(now_tracks, s.tracks) then
+    for _, tr in ipairs(now_tracks) do r.SetTrackSelected(tr, false) end
+    for _, tr in ipairs(s.tracks) do
+      if r.ValidatePtr(tr, "MediaTrack*") then r.SetTrackSelected(tr, true) end
+    end
+  end
+  if r.GetCursorPosition() ~= s.cursor then r.SetEditCurPos(s.cursor, false, false) end
 end
 
 local function with_temp_state(fn)
@@ -1093,7 +1120,7 @@ end
 local function parse_mapping(resolved, nrows, has_leaf)
   local parts = split(resolved, "/")
   if not has_leaf and nrows > 0 then
-    if #parts ~= nrows + 1 or not parts[#parts]:match("^@%-?%d*$") then return nil end
+    if #parts ~= nrows + 1 or not M.is_marker(parts[#parts]) then return nil end
     parts[#parts] = nil
   end
   local want = nrows + (has_leaf and 1 or 0)
@@ -1103,13 +1130,29 @@ local function parse_mapping(resolved, nrows, has_leaf)
   return names
 end
 
+-- Our throwaway "@" segment, plus whatever REAPER added to keep names apart when several
+-- targets resolve to the same path ("-001", "_01", " (2)"... it depends on REAPER's version).
+function M.is_marker(seg)
+  return type(seg) == "string" and seg:match("^@[%s%p%d]*$") ~= nil
+end
+
+-- Originals subfolder with every throwaway "@" segment removed, so none can ever become a
+-- folder in Wwise's Originals (it once left folders like "@_01", "@_02"...).
+function M.clean_origsub(p)
+  if not p or p == "" then return p end
+  local keep = {}
+  for seg in p:gsub("/", "\\"):gmatch("[^\\]+") do
+    if not M.is_marker(seg) then keep[#keep + 1] = seg end
+  end
+  return table.concat(keep, "\\")
+end
+
 local function resolve_originals(s)
   if (s.originals_subfolder or "") == "" then return nil end
   local res = resolve_pattern("@" .. s.originals_subfolder:gsub("/", "\\") .. "/@")
   local out = {}
   for i, p in ipairs(res) do
-    -- REAPER adds "-001", "-002"... when several files would get the same name; drop that too.
-    out[i] = p:gsub("^@", ""):gsub("/@%-?%d*$", ""):gsub("/", "\\")
+    out[i] = M.clean_origsub(p:gsub("^@", ""))
   end
   return out
 end
@@ -2353,7 +2396,8 @@ function M.transfer(s, conn, on_status)
       local im = { audioFile = e.file, objectPath = e.path }
       local src = sources_before and e.exists and existing_source_name(sources_before[e.plain:lower()], e.file)
       if src then im.objectPath = e.path .. "\\<AudioFileSource>" .. src end
-      if e.origsub and e.origsub ~= "" then im.originalsSubFolder = e.origsub end
+      local sub = M.clean_origsub(e.origsub)
+      if sub and sub ~= "" then im.originalsSubFolder = sub end
       imports[#imports + 1] = im
     end
   end
