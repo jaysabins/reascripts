@@ -1,9 +1,12 @@
 -- @description Wwise Tool (send REAPER audio to Wwise)
 -- @author Jay Sabins
--- @version 1.26.1
+-- @version 1.27.0
 -- @changelog
---   Fixed: 1.26.0 stopped with "attempt to call a nil value (global 'title_icon_button')"
---   when the Destination field was showing (Always use the object selected in Wwise off).
+--   Set Initial Delay from layer timing now handles partial shots (e.g. sending only the
+--   Tail again): the shot is measured from its other layers on the timeline (tracks in the
+--   same folder) even when they aren't selected. If they aren't on the timeline either, the
+--   first selected layer keeps the Initial Delay it already has in Wwise instead of 0 (the
+--   preview shows "kept").
 -- @provides
 --   [main] jsabins_Wwise Tool - Quick send.lua
 --   [nomain] jsabins_WwiseTool_core.lua
@@ -366,7 +369,10 @@ local function refresh_job(poll_selection, sig)
         retry_at = r.time_precise() + RETRY_DELAY
       elseif status_line:find("^Wwise is busy") then status_line = "" end
     end
-    if s2.set_initial_delay then newplan.delays, newplan.delay_warnings = core.layer_delays(newplan, s2) end
+    if s2.set_initial_delay then
+      newplan.delays, newplan.delay_warnings, newplan.delay_kept = core.layer_delays(newplan, s2,
+        conn and function(paths) return core.read_delays(paths, PREVIEW_TIMEOUT) end)
+    end
     newplan.tree = core.build_tree(newplan, s2, conn)
     plan = newplan
     if sig then last_sig = after end -- building the plan can bump REAPER's change counter
@@ -1105,7 +1111,10 @@ local function section_destination()
   if c then settings_changed() end
   help("Select all your layers (e.g. every Muzzle and Tail item). Items that overlap in time\n" ..
     "count as one shot; each layer's Initial Delay is how far it starts after the\n" ..
-    "shot's first item. Leave a gap between shots. The delays show in the preview.")
+    "shot's first item. Leave a gap between shots. The delays show in the preview.\n\n" ..
+    "Updating only some layers (e.g. just the Tail): the shot is still measured from its\n" ..
+    "other layers on the timeline (tracks in the same folder), even if they aren't selected.\n" ..
+    "If they aren't on the timeline, the delay already in Wwise is kept (shown as \"kept\").")
   if S.set_initial_delay then
     c, S.delay_target = combo("##delaytarget", core.DELAY_TARGETS, S.delay_target, fw)
     if c then settings_changed() end
@@ -1877,9 +1886,13 @@ local function draw_node(node, depth)
   end
   ImGui.TableNextColumn(ctx)
   if node.delay then
-    ImGui.Text(ctx, delay_text(node.delay))
+    ImGui.Text(ctx, delay_text(node.delay) .. (node.delay_kept and " (kept)" or ""))
     if ImGui.IsItemClicked(ctx, ImGui.MouseButton_Right) then open_delay_menu = true end
-    if ImGui.IsItemHovered(ctx) then ImGui.SetTooltip(ctx, "Right-click to show seconds or milliseconds") end
+    if ImGui.IsItemHovered(ctx) then
+      ImGui.SetTooltip(ctx, (node.delay_kept and "Kept from Wwise: the rest of this shot isn't selected or on the\n" ..
+        "timeline, so its first selected layer keeps the delay it already has.\n\n" or "") ..
+        "Right-click to show seconds or milliseconds")
+    end
   end
   if open and not is_leaf then
     for i, ch in ipairs(node.children) do
