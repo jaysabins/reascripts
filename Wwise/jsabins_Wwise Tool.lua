@@ -1,21 +1,9 @@
 -- @description Wwise Tool (send REAPER audio to Wwise)
 -- @author Jay Sabins
--- @version 1.26.0
+-- @version 1.26.1
 -- @changelog
---   Fixed: with an Originals location set, transfers could put the audio in extra folders
---   named "@_01", "@_02"... inside it (one per Sound with the same path). Those were a
---   placeholder the tool uses to read REAPER's wildcards, plus the number REAPER adds to
---   keep repeated names apart; it now strips them whatever form REAPER's number takes.
---   Fixed: with the tool open, selecting or moving items (folder items especially) filled
---   REAPER's undo history with "Unselect all tracks" steps, so undoing a move took many
---   presses. The preview now puts the track and item selection back without running an
---   action, so it adds nothing to the undo history.
---   Destination: a clock button after From Wwise lists recent destinations (places you sent
---   to or picked with From Wwise, newest first, for the connected Wwise project). Click one
---   to use it; "Clear this list" empties it.
---   Destination field: a path too long for the field shows its end (the start is cut off),
---   like the preview's Originals file column. Hover it to scroll back and forth; click it to
---   edit as usual.
+--   Fixed: 1.26.0 stopped with "attempt to call a nil value (global 'title_icon_button')"
+--   when the Destination field was showing (Always use the object selected in Wwise off).
 -- @provides
 --   [main] jsabins_Wwise Tool - Quick send.lua
 --   [nomain] jsabins_WwiseTool_core.lua
@@ -443,6 +431,9 @@ local function input(label, value, hint, width)
   return v
 end
 
+-- Flat icon buttons (title bar and fields); defined with the title-bar buttons below.
+local title_icon_button
+
 -- Text field that shows the END of its text when it's too long for the field (the start is cut
 -- off instead), like the preview's Originals file column. Hovering scrolls it back and forth.
 -- While you type in it, it's a normal text field.
@@ -563,8 +554,6 @@ local function wildcard_menu(id, apply, ghost, size, tight)
   end
 end
 
--- Flat icon buttons (title bar and fields); defined with the title-bar buttons below.
-local title_icon_button
 
 local function from_wwise_button(id, apply, size)
   ImGui.SameLine(ctx)
