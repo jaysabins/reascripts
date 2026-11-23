@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Jay Sabins Scripts" commit="9fd18f1f1e521d4f9e6d79fd1623550c2f5323c5">
+<index version="1" name="Jay Sabins Scripts" commit="a5307a5a5ef5b485523bc6c70405d8b00df579b9">
   <category name="Batch Tools">
     <reapack name="jsabins_Folder_Batch.lua" type="script" desc="Folder Batch Processor">
       <metadata>
@@ -831,6 +831,25 @@ Default tab is added with the setup each project was last using.]]></changelog>
         <source main="main">https://github.com/jaysabins/reascripts/raw/9fd18f1f1e521d4f9e6d79fd1623550c2f5323c5/Wwise/jsabins_Wwise%20Tool.lua</source>
         <source main="main" file="jsabins_Wwise Tool - Quick send.lua">https://github.com/jaysabins/reascripts/raw/9fd18f1f1e521d4f9e6d79fd1623550c2f5323c5/Wwise/jsabins_Wwise%20Tool%20-%20Quick%20send.lua</source>
         <source file="jsabins_WwiseTool_core.lua">https://github.com/jaysabins/reascripts/raw/9fd18f1f1e521d4f9e6d79fd1623550c2f5323c5/Wwise/jsabins_WwiseTool_core.lua</source>
+      </version>
+      <version name="1.26.0" author="Jay Sabins" time="2026-11-23T18:57:41Z">
+        <changelog><![CDATA[Fixed: with an Originals location set, transfers could put the audio in extra folders
+named "@_01", "@_02"... inside it (one per Sound with the same path). Those were a
+placeholder the tool uses to read REAPER's wildcards, plus the number REAPER adds to
+keep repeated names apart; it now strips them whatever form REAPER's number takes.
+Fixed: with the tool open, selecting or moving items (folder items especially) filled
+REAPER's undo history with "Unselect all tracks" steps, so undoing a move took many
+presses. The preview now puts the track and item selection back without running an
+action, so it adds nothing to the undo history.
+Destination: a clock button after From Wwise lists recent destinations (places you sent
+to or picked with From Wwise, newest first, for the connected Wwise project). Click one
+to use it; "Clear this list" empties it.
+Destination field: a path too long for the field shows its end (the start is cut off),
+like the preview's Originals file column. Hover it to scroll back and forth; click it to
+edit as usual.]]></changelog>
+        <source main="main">https://github.com/jaysabins/reascripts/raw/a5307a5a5ef5b485523bc6c70405d8b00df579b9/Wwise/jsabins_Wwise%20Tool.lua</source>
+        <source main="main" file="jsabins_Wwise Tool - Quick send.lua">https://github.com/jaysabins/reascripts/raw/a5307a5a5ef5b485523bc6c70405d8b00df579b9/Wwise/jsabins_Wwise%20Tool%20-%20Quick%20send.lua</source>
+        <source file="jsabins_WwiseTool_core.lua">https://github.com/jaysabins/reascripts/raw/a5307a5a5ef5b485523bc6c70405d8b00df579b9/Wwise/jsabins_WwiseTool_core.lua</source>
       </version>
     </reapack>
   </category>
