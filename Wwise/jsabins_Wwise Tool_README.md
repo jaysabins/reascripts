@@ -228,7 +228,7 @@ The right side shows what the transfer will create, laid out like Wwise's Projec
   - **Channels** shows whether a Sound will be mono or stereo, and lets you change it. See [Mono and stereo](#mono-and-stereo).
   - **Stream** shows whether a Sound will be set to stream in Wwise, and lets you change it. See [Streaming](#streaming).
   - **Loop** shows whether a Sound will be set to loop, and lets you change it. See [Loop](#loop).
-  - **Originals file** is the file name Wwise will keep in Originals. Hover for the full path.
+  - **Originals file** is the file name Wwise will keep in Originals. Hover for the full path. **Orange** means a file with that name is already in Originals, so the transfer replaces it; **green** means it's a new file. (Grey while Wwise isn't connected, or for voice before a language is picked.)
   - **Initial delay** shows the layer timing delays, in seconds by default (0.042 s, as Wwise shows it). Right-click a value to switch to milliseconds (42 ms), or change it in **Settings > Interface**.
 - **Right-click any column header** to choose which columns you see.
 - **Drag a column header** left or right to put the columns in the order you like (Name always stays first). The order is remembered. To go back to the original order, right-click a header and pick **Reset order**.

@@ -1,7 +1,10 @@
 -- @description Wwise Tool (send REAPER audio to Wwise)
 -- @author Jay Sabins
--- @version 1.27.0
+-- @version 1.28.0
 -- @changelog
+--   The preview's Originals file column shows whether each WAV replaces a file already in
+--   the Wwise project's Originals folder (orange) or is a new file (green). Hover a file for
+--   the full path and which it is; hover the column header for the key.
 --   Set Initial Delay from layer timing now handles partial shots (e.g. sending only the
 --   Tail again): the shot is measured from its other layers on the timeline (tracks in the
 --   same folder) even when they aren't selected. If they aren't on the timeline either, the
@@ -368,6 +371,19 @@ local function refresh_job(poll_selection, sig)
         status_line = "Wwise is busy, the preview will update in a moment."
         retry_at = r.time_precise() + RETRY_DELAY
       elseif status_line:find("^Wwise is busy") then status_line = "" end
+    end
+    -- Which Originals files are already on disk: the preview colors them orange (the transfer
+    -- replaces that file) or green (a new file). Checked once per rebuild, not every frame.
+    if conn then
+      if conn.originals_dir == nil then conn.originals_dir = core.wwise_originals_dir(conn) or false end
+      local root = conn.originals_dir and not (s2.leaf.voice and (s2.leaf.language or "") == "")
+        and (conn.originals_dir .. "\\" .. core.originals_root(s2) .. "\\")
+      if root then
+        for _, e in ipairs(newplan.entries) do
+          local o = core.originals_name(e)
+          if o then e.orig_exists = r.file_exists(root .. (o:gsub("/", "\\"))) end
+        end
+      end
     end
     if s2.set_initial_delay then
       newplan.delays, newplan.delay_warnings, newplan.delay_kept = core.layer_delays(newplan, s2,
@@ -1881,7 +1897,12 @@ local function draw_node(node, depth)
   if node.entry then
     local o = core.originals_name(node.entry)
     if o then
-      tail_text(o, COLOR_DIM, "Originals\\" .. core.originals_root(S) .. "\\" .. o, "Originals file")
+      -- Orange: replaces a file already in Originals. Green: a new file. Dim: not known (offline).
+      local ex = node.entry.orig_exists
+      local tip = "Originals\\" .. core.originals_root(S) .. "\\" .. o
+      if ex == true then tip = tip .. "\nReplaces the file already in Originals"
+      elseif ex == false then tip = tip .. "\nNew file" end
+      tail_text(o, ex == true and COLOR_EXISTS or ex == false and COLOR_NEW or COLOR_DIM, tip, "Originals file")
     end
   end
   ImGui.TableNextColumn(ctx)
@@ -1922,7 +1943,9 @@ local PREVIEW_COLS = {
   { id = "Channels", w = 80 },
   { id = "Streaming", label = "Stream", w = 70 }, -- id kept so saved column choices still apply
   { id = "Loop", w = 70 },
-  { id = "Originals file", stretch = true, w = 3 },
+  { id = "Originals file", stretch = true, w = 3,
+    tip = "The file Wwise keeps in its Originals folder.\n" ..
+      "Orange: replaces a file that's already there.\nGreen: a new file." },
   { id = "Initial delay", w = 80 },
 }
 local cols_frames = 0
