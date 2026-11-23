@@ -204,6 +204,11 @@ Made for layered sounds, such as a gunshot built from a muzzle, a mechanical lay
    - **Each Sound**.
 5. The delays show in the preview's **Initial delay** column, and are written during the transfer, after templates, so a template can't overwrite them.
 
+**Updating only some layers** (say you re-send just the Tail of a shot): you only need to select the layers you're sending.
+
+- The shot is still measured from its other layers on the timeline, even when they aren't selected. The tool looks at the tracks in the same folder as the selected layers (and, if nothing overlaps there, the folder above), counting items of the same kind (folder items if you're sending folder items) that overlap the selection. Muted items are ignored. So if you nudged the Tail in REAPER, its new timing is used.
+- If none of the shot's other layers are on the timeline, the first selected layer keeps the Initial Delay it already has in Wwise instead of getting 0, and any other selected layers follow from their REAPER timing after it. The preview marks these values **(kept)**.
+
 **Set delays on existing objects now** writes the delays straight away to objects that are already in Wwise, without transferring any audio. It's one undo step in Wwise.
 
 ### Preview

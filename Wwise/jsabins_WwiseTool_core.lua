@@ -1488,32 +1488,143 @@ end
 -- Items that overlap in time form one "shot" (e.g. Muzzle_01 + Tail_01). Each item's
 -- delay is its start minus the shot's earliest start. With target "container", each
 -- layer container (the level above the Sounds) gets the smallest delay among its
--- Sounds; with "sound", every Sound gets its own. Returns { [plain path] = seconds }
--- plus a list of warnings.
+-- Sounds; with "sound", every Sound gets its own.
+--
+-- Partial shots (e.g. only the Tail selected): the shot's start is also measured from
+-- the unselected items of the same kind on the layer tracks beside the selected ones
+-- (same parent folder; if none overlap there, the folder above it). If none
+-- of the shot's other layers are on the timeline, the shot's first selected layer keeps
+-- the Initial Delay it already has in Wwise and the rest follow from REAPER timing.
+-- `read_wwise` (optional) is function(paths) -> { [lowercase path] = seconds }.
+-- Returns { [plain path] = seconds }, a list of warnings, and { [plain path] = true }
+-- for the delays kept from Wwise.
 local function parent_path(p) return p:match("^(.*)\\[^\\]+$") end
 
-function M.layer_delays(plan, s)
-  local list = {}
+-- Unselected, unmuted items on tracks under `anc` that `want` accepts (cached per call).
+local function items_under(anc, cache, skip, want)
+  if cache[anc] then return cache[anc] end
+  local out = {}
+  for i = 0, r.CountTracks(0) - 1 do
+    local tr = r.GetTrack(0, i)
+    if track_is_under(tr, anc) then
+      for j = 0, r.CountTrackMediaItems(tr) - 1 do
+        local it = r.GetTrackMediaItem(tr, j)
+        if not skip[it] and r.GetMediaItemInfo_Value(it, "B_MUTE") == 0 and want(it) then
+          local pos = r.GetMediaItemInfo_Value(it, "D_POSITION")
+          out[#out + 1] = { pos = pos, fin = pos + r.GetMediaItemInfo_Value(it, "D_LENGTH") }
+        end
+      end
+    end
+  end
+  cache[anc] = out
+  return out
+end
+
+-- Widen shot `g` with the unselected layers on the timeline. True if any were found.
+local function widen_from_timeline(g, skip, caches, want)
+  local tracks = {}
+  for _, x in ipairs(g.members) do tracks[#tracks + 1] = x.track end
+  for _ = 1, 2 do -- the parent folder, then the one above it (layer folders inside a shot folder)
+    local ancs, seen = {}, {}
+    for i, tr in ipairs(tracks) do
+      local p = tr and r.GetParentTrack(tr)
+      tracks[i] = p
+      if p and not seen[p] then seen[p] = true; ancs[#ancs + 1] = p end
+    end
+    if #ancs == 0 then return false end
+    local cands = {}
+    for _, a in ipairs(ancs) do
+      for _, c in ipairs(items_under(a, caches, skip, want)) do cands[#cands + 1] = c end
+    end
+    local s0, f0, found, used = g.start, g.fin, false, {}
+    local grew = true
+    while grew do
+      grew = false
+      for i, c in ipairs(cands) do
+        if not used[i] and c.pos < f0 - 1e-9 and c.fin > s0 + 1e-9 then
+          used[i], found, grew = true, true, true
+          s0, f0 = math.min(s0, c.pos), math.max(f0, c.fin)
+        end
+      end
+    end
+    if found then g.start, g.fin = s0, f0; return true end
+  end
+  return false
+end
+
+-- Initial Delay (seconds) of existing Wwise objects. Returns { [lowercase path] = seconds }.
+function M.read_delays(paths, timeout)
+  local list = json.array()
+  for _, p in ipairs(paths) do list[#list + 1] = p end
+  if #list == 0 then return {} end
+  local res, err = M.waapi("ak.wwise.core.object.get", { from = { path = list } },
+    { ["return"] = { "path", "@InitialDelay" } }, timeout)
+  if not res then return nil, err end
+  local out = {}
+  for _, o in ipairs(res["return"] or {}) do
+    local v = tonumber(o["@InitialDelay"])
+    if o.path and v then out[o.path:lower()] = v end
+  end
+  return out
+end
+
+function M.layer_delays(plan, s, read_wwise)
+  local by_container = (s.delay_target or "container") == "container" and #(s.rows or {}) > 0
+  local function target(x) return by_container and parent_path(x.e.plain) or x.e.plain end
+  local list, skip = {}, {}
   for _, e in ipairs(plan.entries or {}) do
     if e.plain and e.item and r.ValidatePtr(e.item, "MediaItem*") then
       local pos = r.GetMediaItemInfo_Value(e.item, "D_POSITION")
-      list[#list + 1] = { e = e, pos = pos, fin = pos + r.GetMediaItemInfo_Value(e.item, "D_LENGTH") }
+      list[#list + 1] = { e = e, pos = pos, fin = pos + r.GetMediaItemInfo_Value(e.item, "D_LENGTH"),
+                          track = r.GetMediaItem_Track(e.item), folder = e.kind == "folder" }
+      skip[e.item] = true
     end
   end
   table.sort(list, function(a, b) return a.pos < b.pos end)
-  local g
+  local groups, g = {}, nil
   for _, x in ipairs(list) do
-    if not g or x.pos >= g.fin - 1e-9 then g = { start = x.pos, fin = x.fin } else g.fin = math.max(g.fin, x.fin) end
-    x.delay = x.pos - g.start
+    if not g or x.pos >= g.fin - 1e-9 then
+      g = { start = x.pos, fin = x.fin, members = {} }
+      groups[#groups + 1] = g
+    else g.fin = math.max(g.fin, x.fin) end
+    g.members[#g.members + 1] = x
   end
-  local out, warnings = {}, {}
-  local by_container = (s.delay_target or "container") == "container" and #(s.rows or {}) > 0
+
+  -- Partial shots: measure from the other layers on the timeline, else keep Wwise's value.
+  local any = s.source == "folders"
+  local caches = { [true] = {}, [false] = {} }
+  local wants = {
+    [true] = function(it) return is_folder_item(it, any) end,
+    [false] = function(it) return not is_folder_item(it, any) end,
+  }
+  local ask, asked = {}, {}
+  for _, gr in ipairs(groups) do
+    local kind = gr.members[1].folder
+    if not widen_from_timeline(gr, skip, caches[kind], wants[kind]) then
+      local first = target(gr.members[1])
+      if first and (plan.existing or {})[first:lower()] then
+        gr.ask = first
+        if not asked[first:lower()] then asked[first:lower()] = true; ask[#ask + 1] = first end
+      end
+    end
+  end
+  local current = (read_wwise and #ask > 0) and read_wwise(ask) or {}
+  for _, gr in ipairs(groups) do
+    local base = gr.ask and current[gr.ask:lower()] or 0
+    gr.kept = base > 0.0005
+    for _, x in ipairs(gr.members) do
+      x.delay = x.pos - gr.start + (gr.kept and base or 0)
+      x.kept = gr.kept
+    end
+  end
+
+  local out, warnings, kept = {}, {}, {}
   if by_container then
     local lo, hi = {}, {}
     for _, x in ipairs(list) do
       local c = parent_path(x.e.plain)
       if c then
-        lo[c] = math.min(lo[c] or math.huge, x.delay)
+        if x.delay < (lo[c] or math.huge) then lo[c] = x.delay; kept[c] = x.kept or nil end
         hi[c] = math.max(hi[c] or -math.huge, x.delay)
       end
     end
@@ -1525,9 +1636,9 @@ function M.layer_delays(plan, s)
       end
     end
   else
-    for _, x in ipairs(list) do out[x.e.plain] = x.delay end
+    for _, x in ipairs(list) do out[x.e.plain] = x.delay; kept[x.e.plain] = x.kept or nil end
   end
-  return out, warnings
+  return out, warnings, kept
 end
 
 -- Set properties on Wwise objects in one call. objs: { { object = path, ["@Prop"] = value, ... } }.
@@ -1626,7 +1737,8 @@ function M.build_tree(plan, s, conn)
         local child = node.index[key]
         if not child then
           child = { name = nm, type = s.rows[i] and s.rows[i].type or "?", path = path, children = {}, index = {},
-                    sounds = 0, new_count = 0, status = status_of(path), delay = plan.delays and plan.delays[path] }
+                    sounds = 0, new_count = 0, status = status_of(path), delay = plan.delays and plan.delays[path],
+                    delay_kept = plan.delay_kept and plan.delay_kept[path] }
           node.index[key] = child
           node.children[#node.children + 1] = child
         end
@@ -1634,7 +1746,8 @@ function M.build_tree(plan, s, conn)
         chain[#chain + 1] = node
       end
       local leaf = { name = e.name, type = sound_type, path = e.plain, entry = e, children = {}, index = {},
-                     sounds = 1, new_count = 0, delay = plan.delays and plan.delays[e.plain] }
+                     sounds = 1, new_count = 0, delay = plan.delays and plan.delays[e.plain],
+                     delay_kept = plan.delay_kept and plan.delay_kept[e.plain] }
       leaf.status = e.duplicate and "duplicate" or status_of(e.plain)
       node.children[#node.children + 1] = leaf
       for _, c in ipairs(chain) do c.sounds = c.sounds + 1 end
@@ -2350,6 +2463,11 @@ function M.transfer(s, conn, on_status)
   local existing = M.mark_existing(plan)
   lap("Check existing objects")
 
+  -- Work out initial delays now: an import that replaces objects would lose the
+  -- delays already in Wwise that partial shots keep.
+  local delays, warns
+  if s.set_initial_delay then delays, warns = M.layer_delays(plan, s, M.read_delays) end
+
   status("Rendering...")
   local ok, rerr = do_render(s, plan)
   if not ok then summary.errors[#summary.errors + 1] = "Render failed: " .. tostring(rerr); return summary end
@@ -2495,7 +2613,6 @@ function M.transfer(s, conn, on_status)
   -- Initial delay from layer timing (after templates, so a template can't overwrite it).
   if s.set_initial_delay then
     status("Setting initial delays...")
-    local delays, warns = M.layer_delays(plan, s)
     local n, derr = M.apply_delays(delays)
     summary.delays = n
     summary.notes = summary.notes or {}
