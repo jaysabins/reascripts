@@ -397,11 +397,20 @@ local function fill_uids(t)
   end
 end
 
+M.PLACE_KEYS = { "destination", "originals_subfolder" }
+-- The place-free copy of a setup, for what's shared between projects.
+local function without_place(s)
+  local out = {}
+  for k, v in pairs(s) do out[k] = v end
+  for _, k in ipairs(M.PLACE_KEYS) do out[k] = "" end
+  return out
+end
+
 -- The shared list keeps every tab's settings except Default's (that one is per project).
 local function global_tabs_text(t)
   local list = {}
   for i, tab in ipairs(t.list) do
-    list[i] = { uid = tab.uid, name = tab.name, color = tab.color, s = tab.uid ~= M.DEFAULT_TAB_UID and tab.s or {} }
+    list[i] = { uid = tab.uid, name = tab.name, color = tab.color, s = tab.uid ~= M.DEFAULT_TAB_UID and without_place(tab.s) or {} }
   end
   return json.encode({ list = list })
 end
@@ -444,6 +453,57 @@ function M.ensure_default_tab(t, s)
                               s = s and M.copy_settings(s) or M.default_settings() })
   end
   return old_uid
+end
+
+-- Where this project imports to (1.29.0, keys in M.PLACE_KEYS): the Destination path and the Originals location
+-- are saved with the REAPER project (ProjExtState "place", so in the .rpp), not in the shared
+-- tabs or presets. Every tab in a project uses the same ones, and switching projects brings
+-- back that project's own. A project that has none yet starts empty, so you can't send to the
+-- last project's place by accident.
+
+-- { destination =, originals_subfolder = } saved in `proj` (default current), or nil if none yet.
+function M.load_place(proj)
+  local _, txt = r.GetProjExtState(proj or 0, M.EXT, "place")
+  local t = read_json(txt)
+  if not t then return nil end
+  local place = {}
+  for _, k in ipairs(M.PLACE_KEYS) do place[k] = type(t[k]) == "string" and t[k] or "" end
+  return place
+end
+
+function M.save_place(place, proj)
+  local out = {}
+  for _, k in ipairs(M.PLACE_KEYS) do out[k] = place[k] or "" end
+  local txt = json.encode(out)
+  local _, old = r.GetProjExtState(proj or 0, M.EXT, "place")
+  if old ~= txt then r.SetProjExtState(proj or 0, M.EXT, "place", txt) end
+end
+
+-- True when the project has never had a Destination or Originals location saved.
+function M.place_missing(proj)
+  return M.load_place(proj) == nil
+end
+
+-- Put `place` into every tab's settings.
+function M.apply_place(t, place)
+  for _, tab in ipairs(t.list) do
+    for _, k in ipairs(M.PLACE_KEYS) do tab.s[k] = place[k] or "" end
+  end
+end
+
+-- This project's place. Projects saved before 1.29.0 keep the one they were last using
+-- (the project's own "settings", else its Default tab); a new project gets empty fields.
+local function project_place(pj)
+  local place = M.load_place(0)
+  if place then return place end
+  local _, txt = r.GetProjExtState(0, M.EXT, "settings")
+  if txt == "" then _, txt = r.GetProjExtState(0, M.OLD_EXT, "settings") end
+  local old = read_json(txt) or (pj and type(pj.default) == "table" and pj.default) or nil
+  if not old then return { destination = "", originals_subfolder = "" } end
+  place = {}
+  for _, k in ipairs(M.PLACE_KEYS) do place[k] = type(old[k]) == "string" and old[k] or "" end
+  M.save_place(place, 0)
+  return place
 end
 
 function M.load_tabs()
@@ -505,6 +565,7 @@ function M.load_tabs()
     if tab.name == "" then tab.name = "Tab " .. i end
   end
   t.next_id = #t.list + 1
+  M.apply_place(t, project_place(pj))
   return t
 end
 
@@ -520,17 +581,24 @@ function M.save_tabs(t, proj)
   fill_uids(t)
   local active_uid = t.list[t.active] and t.list[t.active].uid
   M.ensure_default_tab(t, nil)
+  -- The showing tab's Destination and Originals belong to the project: every tab uses them.
+  local showing = t.list[t.active] or t.list[1]
+  local place = {}
+  for _, k in ipairs(M.PLACE_KEYS) do place[k] = showing.s[k] or "" end
+  M.apply_place(t, place)
+  local had = M.load_place(proj) ~= nil
+  if had or place.destination ~= "" or place.originals_subfolder ~= "" then M.save_place(place, proj) end
   local def = t.list[1].s
   local txt = json.encode({ format = 2, active_uid = active_uid, default = def })
   local _, old = r.GetProjExtState(proj, M.EXT, "tabs")
   if old ~= txt then r.SetProjExtState(proj, M.EXT, "tabs", txt) end
-  local dtxt = json.encode(def)
+  local dtxt = json.encode(without_place(def))
   if dtxt ~= r.GetExtState(M.EXT, "default_tab") then r.SetExtState(M.EXT, "default_tab", dtxt, true) end
   local gtxt = global_tabs_text(t)
   if gtxt ~= r.GetExtState(M.EXT, "tab_list") then r.SetExtState(M.EXT, "tab_list", gtxt, true) end
   -- What versions before 1.24.0 read as the default for new projects.
   local all = {}
-  for i, tab in ipairs(t.list) do all[i] = { name = tab.name, color = tab.color, s = tab.s } end
+  for i, tab in ipairs(t.list) do all[i] = { name = tab.name, color = tab.color, s = without_place(tab.s) } end
   r.SetExtState(M.EXT, "last_tabs", json.encode({ active = t.active, list = all }), true)
 end
 
@@ -538,10 +606,11 @@ function M.copy_settings(s) return merge_defaults(json.decode(json.encode(s))) e
 
 -- Presets come in two kinds, saved separately and the same in every project:
 --   "structure": the Wwise structure only (levels with their names and templates, and the Sound row).
---   "settings":  everything else that shapes a transfer (source, destination, Originals subfolder,
---                conflict choice, Initial Delay, render and transfer options).
+--   "settings":  everything else that shapes a transfer (source, destination mode, conflict choice,
+--                Initial Delay, render and transfer options). Since 1.29.0 the Destination path and
+--                Originals location are not part of it: they belong to the project (see M.PLACE_KEYS).
 -- The connection port and the preview's Mono/Stereo and Streaming overrides are never part of a preset.
-M.SETTINGS_PRESET_KEYS = { "source", "use_wwise_selection", "destination", "originals_subfolder",
+M.SETTINGS_PRESET_KEYS = { "source", "use_wwise_selection",
   "conflict", "set_initial_delay", "delay_target", "skip_render_untouched", "items_via_master",
   "folders_via_master", "mono_to_mono", "render_folder", "apply_template", "select_in_wwise",
   "stream_auto", "stream_min_sec", "stream_zero_latency", "stream_non_cachable" }
@@ -594,6 +663,7 @@ function M.save_presets(kind, p) r.SetExtState(M.EXT, PRESET_KEYS[kind], json.en
 
 function M.preset_from(kind, s)
   if kind == "structure" then return structure_part(s) end
+  if kind == "place" then return { destination = s.destination or "", originals_subfolder = s.originals_subfolder or "" } end
   local p = {}
   for _, k in ipairs(M.SETTINGS_PRESET_KEYS) do p[k] = s[k] end
   return p
@@ -861,7 +931,7 @@ M.CONFIG_FORMAT = "jsabins Wwise Tool configuration"
 
 function M.config_text(tabs, view)
   local list = {}
-  for i, tab in ipairs(tabs.list) do list[i] = { name = tab.name, color = tab.color, s = tab.s } end
+  for i, tab in ipairs(tabs.list) do list[i] = { name = tab.name, color = tab.color, s = without_place(tab.s) } end
   return json.encode({
     format = M.CONFIG_FORMAT, config_version = 1, script_version = M.VERSION,
     tabs = { active = tabs.active, list = list },

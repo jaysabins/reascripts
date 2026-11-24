@@ -90,7 +90,7 @@ The left panel's width can be changed: drag the edge between it and the preview.
 
 ### Tabs
 
-Under the toolbar is a row of tabs. Each tab is a complete setup: the Wwise structure, the destination, the source, the Originals location, the Renders location, the conflict and Initial Delay options, the Mono/Stereo, Streaming and Loop choices from the preview, and the Rendering, Channels, Transfer and Stream & loop options in **Settings**. Click a tab to switch to it; everything on the left and the preview change to that tab's setup. Only the connection port is shared by all tabs.
+Under the toolbar is a row of tabs. Each tab is a complete setup: the Wwise structure, the source, the Renders location, the conflict and Initial Delay options, the Mono/Stereo, Streaming and Loop choices from the preview, and the Rendering, Channels, Transfer and Stream & loop options in **Settings**. Click a tab to switch to it; everything on the left and the preview change to that tab's setup. The connection port is shared by all tabs, and the Destination path and Originals location belong to the REAPER project, not the tab (see [Destination](#destination)).
 
 - **+** adds a new tab that starts as a copy of the one showing.
 - **Drag** a tab left or right to change the order (Default always stays first).
@@ -111,11 +111,11 @@ Presets still work inside a tab: loading a structure or settings preset changes 
 There are two kinds of presets, so you can load one part of a setup without changing the rest:
 
 - **Structure presets** (the layers icon at the right end of the **Wwise structure** title) save just the structure: the levels, their names and property templates, and the Sound row (SFX or Voice, name, template and language).
-- **Settings presets...** (in **Settings > Configuration**) save everything else: the source, the destination, the Originals location, the Renders location, the conflict choice, the Initial Delay options, and the rendering and transfer options in **Settings**.
+- **Settings presets...** (in **Settings > Configuration**) save everything else: the source, whether to use the Wwise selection as the destination, the Renders location, the conflict choice, the Initial Delay options, and the rendering and transfer options in **Settings**.
 
 In either popup, click a name under **Load** to load it. To save, type a name and click **Save** (an existing name is overwritten). To delete, type or load its name and click **Delete**.
 
-The connection port and the Mono/Stereo choices from the preview are never part of a preset.
+The connection port, the Mono/Stereo choices from the preview, and the project's Destination path and Originals location are never part of a preset.
 
 ### Export and import the whole configuration
 
@@ -137,6 +137,8 @@ Choose what gets sent:
 The Sound's name comes from the item's take name (or the rendered file's name in render settings mode), unless you give the Sound level a name pattern (see below).
 
 ### Destination
+
+The Destination path and the **Originals location** are saved with the REAPER project (in the .rpp), not in the tabs or presets. Every tab in a project uses the same ones, and when you switch to another project, or open it later, its own come back. A new project starts with both empty, and while it has no destination the section says so in orange, so you can't import into the last project's place by mistake. Projects saved with an older version keep the destination they were last using.
 
 - **Always use the object selected in Wwise** (on by default) sends the Sounds into whatever is selected in Wwise when you click Transfer. If a Sound is selected, its parent is used.
 - Untick it to use a fixed path instead. Type the path, or select the object in Wwise and click the **From Wwise** button (the arrow in a circle) next to the field.
@@ -307,7 +309,7 @@ The gear button opens **Settings** in its own window. The main window stays usab
   - **Type colors:** a color picker for each Wwise type (Actor-Mixer, Random, Sequence, Switch and Blend Containers, Virtual Folder, Work Unit, Physical Folder, Sound, Destination). These colors are used for the structure rows and the preview's tags. **Reset colors to defaults** brings back the built-in scheme.
 - **Diagnostics:** a log of moments where REAPER was slow. If something stutters, click **Copy slow-moment log** and include it in a bug report.
 
-Settings are saved with each REAPER project, and the last-used settings carry over to new projects. The Rendering, Channels, Transfer and Stream & loop options belong to the tab that's showing (see [Tabs](#tabs)); the port is shared by all tabs. Presets, visible columns and their order, window opacity, the delay unit and type colors apply to every project.
+Settings are saved with each REAPER project, and the last-used settings carry over to new projects, except the Destination path and Originals location, which start empty in a new project. The Rendering, Channels, Transfer and Stream & loop options belong to the tab that's showing (see [Tabs](#tabs)); the port is shared by all tabs. Presets, visible columns and their order, window opacity, the delay unit and type colors apply to every project.
 
 ## Example setups
 

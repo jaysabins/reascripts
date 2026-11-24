@@ -1,7 +1,13 @@
 -- @description Wwise Tool (send REAPER audio to Wwise)
 -- @author Jay Sabins
--- @version 1.28.0
+-- @version 1.29.0
 -- @changelog
+--   The Destination path and Originals location are now saved with the REAPER project
+--   instead of in the tabs and presets. Switching projects brings back that project's own,
+--   every tab in a project uses the same ones, and a project that has none yet starts with
+--   them empty and an orange note, so you can't import into the last project's place by
+--   accident. Projects from older versions keep the destination they were last using.
+--   Settings presets no longer change the Destination or Originals location.
 --   The preview's Originals file column shows whether each WAV replaces a file already in
 --   the Wwise project's Originals folder (orange) or is a new file (green). Hover a file for
 --   the full path and which it is; hover the column header for the key.
@@ -269,7 +275,6 @@ local function connect()
   conn, conn_err, code = core.connect(UI.CONNECT_TIMEOUT)
   -- Busy (e.g. still loading a project): try again in a few seconds.
   reconnect_at = (not conn and code == "busy") and (r.time_precise() + 5) or nil
-  if conn and S.destination == "" then S.destination = conn.root .. "\\Default Work Unit" end
   if conn and S.leaf.voice and S.leaf.language == "" and conn.languages[1] then S.leaf.language = conn.languages[1] end
   forget_existing()
   last_sig = nil
@@ -1074,6 +1079,15 @@ local function section_destination()
   local c
   c, S.use_wwise_selection = ImGui.Checkbox(ctx, "Always use the object selected in Wwise", S.use_wwise_selection)
   if c then settings_changed(); sel_poll_at = 0 end
+  -- Destination and Originals are saved with the REAPER project: say so when this one has none yet.
+  local cue = not S.use_wwise_selection and S.destination == "" and (core.place_missing()
+    and "Not set for this project yet. Destination and Originals are saved with the project."
+    or "No destination set for this project.") or nil
+  if cue then
+    ImGui.PushTextWrapPos(ctx, 0)
+    ImGui.TextColored(ctx, COLOR_EXISTS, cue)
+    ImGui.PopTextWrapPos(ctx)
+  end
   if S.use_wwise_selection then
     if ImGui.SmallButton(ctx, "Refresh##selpoll") then sel_poll_at = 0; forget_existing(); last_sig = nil end
     ImGui.SameLine(ctx)
@@ -1095,7 +1109,8 @@ local function section_destination()
   end
   if ImGui.IsItemHovered(ctx) then
     ImGui.SetTooltip(ctx, "Folder inside the Wwise project's Originals folder (SFX or Voices\\<language>)\n" ..
-      "where the imported audio files go. Empty: straight in Originals\\SFX (or the language folder).")
+      "where the imported audio files go. Empty: straight in Originals\\SFX (or the language folder).\n" ..
+      "Saved with this REAPER project, like the Destination.")
   end
   wildcard_menu("orig", function(w) S.originals_subfolder = S.originals_subfolder .. w end, true, sq)
   ImGui.SameLine(ctx)
@@ -2480,12 +2495,13 @@ end
 local function settings_configuration()
   ImGui.SeparatorText(ctx, "Settings presets")
   ImGui.PushTextWrapPos(ctx, 480)
-  dim_label("Everything except the Wwise structure: source, destination, Originals subfolder, conflict choice, " ..
+  dim_label("Everything except the Wwise structure and this project's Destination and Originals location: " ..
+    "source, destination mode, conflict choice, " ..
     "Initial Delay, and the render and transfer options. Loading one changes the tab that's showing.")
   ImGui.PopTextWrapPos(ctx)
   presets_button("settings", "Settings presets...",
-    "Save or load everything except the Wwise structure: source, destination, Originals\n" ..
-    "subfolder, conflict choice, Initial Delay, and the render and transfer options in Settings.\n" ..
+    "Save or load everything except the Wwise structure and this project's Destination and\n" ..
+    "Originals location (those are saved with the project): source, conflict choice, Initial Delay, and the render and transfer options in Settings.\n" ..
     "Loading one leaves the Wwise structure as it is.")
   ImGui.Dummy(ctx, 0, 6)
   ImGui.SeparatorText(ctx, "Export and import")
@@ -2724,6 +2740,7 @@ end
 
 apply_imported_config = function(cfg)
   local port = S.http_port -- keep this computer's connection port
+  local place = core.preset_from("place", S) -- and this project's Destination and Originals
   for _, kind in ipairs({ "structure", "settings" }) do
     for name, p in pairs(cfg[kind .. "_presets"]) do presets[kind][name] = p end
     core.save_presets(kind, presets[kind])
@@ -2741,6 +2758,7 @@ apply_imported_config = function(cfg)
   tabs = cfg.tabs
   UI.renew_tab_ids()
   for _, tab in ipairs(tabs.list) do tab.s.http_port = port end
+  core.apply_place(tabs, place)
   S = tabs.list[tabs.active].s
   core.http_port = S.http_port
   save_all()
@@ -2751,9 +2769,11 @@ end
 
 local function show_tab(i)
   local port = S.http_port -- the connection is the same in every tab
+  local place = core.preset_from("place", S) -- and so are this project's Destination and Originals
   tabs.active = i
   S = tabs.list[i].s
   S.http_port = port
+  core.apply_place(tabs, place)
   tab_select_pending = true
   setup_switched()
   settings_changed()
