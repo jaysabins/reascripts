@@ -3,6 +3,7 @@
 -- @version 1.1.0
 -- @changelog
 --   The new folder holding Body and Thump keeps Body's name (e.g. ..._3P_..._Body) instead of ..._Body_Thump.
+--   The copy's top folder keeps its name with " - 3p" added (e.g. SNS_SMG_BRP_Barrel_02 - 3p).
 --   The copy's items (and automation) move to the right, starting 1 second after the original group's last item ends, so they don't sit under the original.
 -- @about
 --   Makes a third-person (3P) version of a first-person (1P) gun layer group.
@@ -23,6 +24,7 @@
 --       children, so their processing is unchanged; the new folder has no FX.
 --     - keeps Mech as it is
 --     - deletes the Pre track and everything inside it
+--     - adds " - 3p" to the end of the top folder's name
 --     - changes "1P" to "3P" in every track name (only where 1P stands on its
 --       own, like Wep_1P_SNS, so a name like "B1P2" is left alone)
 --
@@ -38,6 +40,9 @@ local TITLE = "GunKit: Make 3P from 1P"
 -- Gap (seconds) between the end of the original group's last item and the
 -- start of the 3P copy's first item.
 local GAP_AFTER_ORIGINAL = 1.0
+
+-- Added to the end of the copy's top folder name
+local PARENT_SUFFIX = " - 3p"
 
 ----------------------------------------------------------------------
 -- Helpers
@@ -286,6 +291,11 @@ local function process_group(parent)
     local name = track_name(e.tr)
     local new = to_3p(name)
     if new ~= name then r.GetSetMediaTrackInfo_String(e.tr, "P_NAME", new, true) end
+  end
+  -- the copy's top folder keeps its name plus PARENT_SUFFIX
+  local top = track_name(dup[1].tr)
+  if top:sub(-#PARENT_SUFFIX):lower() ~= PARENT_SUFFIX:lower() then
+    r.GetSetMediaTrackInfo_String(dup[1].tr, "P_NAME", top .. PARENT_SUFFIX, true)
   end
 
   -- Apply the structural changes. Build the final order first, then make the
