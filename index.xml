@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Jay Sabins Scripts" commit="c1489b7562358c8d3823f54fa8b72e65e1c070cf">
+<index version="1" name="Jay Sabins Scripts" commit="1c596769a6ed1bbc252dc6658b0794dad7218442">
   <category name="Batch Tools">
     <reapack name="jsabins_Folder_Batch.lua" type="script" desc="Folder Batch Processor">
       <metadata>
@@ -117,10 +117,12 @@ Requires ReaImGui (Extensions > ReaPack > Browse packages > ReaImGui).]]></chang
 {\pard \ql \f0 \sa180 \li0 \fi0 Makes a third-person (3P) version of a first-person (1P) gun layer group.\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Select the group's parent folder track (e.g. "SNS_SMG_BRP_Barrel_02") and run. Selecting any track inside the group works too; the script climbs up to the folder that holds the Body/Mech/Thump/Pre tracks. Several groups can be selected at once. Only tracks directly inside the group count as layers.\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 For each group the script duplicates the folder and everything in it, right below the original, and then on the copy only:\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab moves all items (and automation) to the right so the copy starts 1 second after the original group's last item ends, timing kept\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab sets every take to its left channel only (mono, non-destructive: take channel mode "Left", so the source files are untouched)\par}
-{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab puts the Body and Thump folders inside one new folder track named after Body ("..._Body_Thump"). Body and Thump keep their own tracks, FX and children, so their processing is unchanged; the new folder has no FX.\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab puts the Body and Thump folders inside one new folder track with Body's name (e.g. "Wep_3P_..._Body"). Body and Thump keep their own tracks, FX and children, so their processing is unchanged; the new folder has no FX.\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab keeps Mech as it is\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab deletes the Pre track and everything inside it\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab adds " - 3p" to the end of the top folder's name\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab changes "1P" to "3P" in every track name (only where 1P stands on its own, like Wep_1P_SNS, so a name like "B1P2" is left alone)\sa180\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Layer tracks are found by name, ignoring case: a word "Body", "Mech", "Thump" or "Pre" separated by _ - . or spaces (so "Pressure" is not Pre). The original group is never changed. Everything is one undo step.\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 No extensions required.\par}
@@ -130,6 +132,12 @@ Requires ReaImGui (Extensions > ReaPack > Browse packages > ReaImGui).]]></chang
       <version name="1.0.0" author="Jay Sabins" time="2026-11-25T19:00:55Z">
         <changelog><![CDATA[Initial release]]></changelog>
         <source main="main">https://github.com/jaysabins/reascripts/raw/c1489b7562358c8d3823f54fa8b72e65e1c070cf/Items/jsabins_GunKit_Make%203P%20from%201P.lua</source>
+      </version>
+      <version name="1.1.0" author="Jay Sabins" time="2026-11-25T19:12:19Z">
+        <changelog><![CDATA[The new folder holding Body and Thump keeps Body's name (e.g. ..._3P_..._Body) instead of ..._Body_Thump.
+The copy's top folder keeps its name with " - 3p" added (e.g. SNS_SMG_BRP_Barrel_02 - 3p).
+The copy's items (and automation) move to the right, starting 1 second after the original group's last item ends, so they don't sit under the original.]]></changelog>
+        <source main="main">https://github.com/jaysabins/reascripts/raw/1c596769a6ed1bbc252dc6658b0794dad7218442/Items/jsabins_GunKit_Make%203P%20from%201P.lua</source>
       </version>
     </reapack>
     <reapack name="jsabins_GunKit_RPM.lua" type="script" desc="GunKit RPM (respace folder items by rounds per minute)">
