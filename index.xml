@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Jay Sabins Scripts" commit="1c596769a6ed1bbc252dc6658b0794dad7218442">
+<index version="1" name="Jay Sabins Scripts" commit="a454f85c3cb72ae8a3f5f74f29c2022ea83ef7c0">
   <category name="Batch Tools">
     <reapack name="jsabins_Folder_Batch.lua" type="script" desc="Folder Batch Processor">
       <metadata>
@@ -114,17 +114,20 @@ Requires ReaImGui (Extensions > ReaPack > Browse packages > ReaImGui).]]></chang
 {\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
 \widowctrl\hyphauto
 
-{\pard \ql \f0 \sa180 \li0 \fi0 Makes a third-person (3P) version of a first-person (1P) gun layer group.\par}
-{\pard \ql \f0 \sa180 \li0 \fi0 Select the group's parent folder track (e.g. "SNS_SMG_BRP_Barrel_02") and run. Selecting any track inside the group works too; the script climbs up to the folder that holds the Body/Mech/Thump/Pre tracks. Several groups can be selected at once. Only tracks directly inside the group count as layers.\par}
-{\pard \ql \f0 \sa180 \li0 \fi0 For each group the script duplicates the folder and everything in it, right below the original, and then on the copy only:\par}
-{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab moves all items (and automation) to the right so the copy starts 1 second after the original group's last item ends, timing kept\par}
-{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab sets every take to its left channel only (mono, non-destructive: take channel mode "Left", so the source files are untouched)\par}
-{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab puts the Body and Thump folders inside one new folder track with Body's name (e.g. "Wep_3P_..._Body"). Body and Thump keep their own tracks, FX and children, so their processing is unchanged; the new folder has no FX.\par}
-{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab keeps Mech as it is\par}
-{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab deletes the Pre track and everything inside it\par}
-{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab adds " - 3p" to the end of the top folder's name\par}
-{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab changes "1P" to "3P" in every track name (only where 1P stands on its own, like Wep_1P_SNS, so a name like "B1P2" is left alone)\sa180\par}
-{\pard \ql \f0 \sa180 \li0 \fi0 Layer tracks are found by name, ignoring case: a word "Body", "Mech", "Thump" or "Pre" separated by _ - . or spaces (so "Pressure" is not Pre). The original group is never changed. Everything is one undo step.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Makes third-person (3P) versions of first-person (1P) gun shots.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Select the folder items of the 1P shots you want (NVK auto-select of the children is fine) and run. For each shot:\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab everything after the shot moves right to make room (items on every track, regions, markers and track automation), like a ripple edit\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab the shot's items are copied into that space, 1 second after the shot (or after its region) ends, with all layer timing kept exactly\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab the copies go on the 3P track group, not the 1P tracks, and play their left channel only (take channel mode "Left", source files untouched)\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab if the shot sits in a region, a matching region is added around the copy with 1P changed to 3P in its name\sa180\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 The 3P track group is made below the 1P group the first time, and reused on later runs. It is a copy of the 1P group's tracks (FX, routing, colors) with no items, where:\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Body and Thump sit inside one new folder track with Body's name; they keep their own FX and children, the new folder has no FX\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Mech stays as it is\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Pre and everything inside it is left out (its items aren't copied)\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab the top folder keeps its name with " - 3p" added\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab "1P" becomes "3P" in the track names (only where 1P stands on its own)\sa180\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 The 1P group is the folder holding tracks named Body, Mech, Thump and Pre (ignoring case; a word separated by _ - . or spaces, so "Pressure" is not Pre). Shots from several gun groups at the same time share one ripple. The 1P items are never changed. Everything is one undo step.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 Not moved by the ripple: tempo and time signature changes.\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 No extensions required.\par}
 }
 ]]></description>
@@ -138,6 +141,14 @@ Requires ReaImGui (Extensions > ReaPack > Browse packages > ReaImGui).]]></chang
 The copy's top folder keeps its name with " - 3p" added (e.g. SNS_SMG_BRP_Barrel_02 - 3p).
 The copy's items (and automation) move to the right, starting 1 second after the original group's last item ends, so they don't sit under the original.]]></changelog>
         <source main="main">https://github.com/jaysabins/reascripts/raw/1c596769a6ed1bbc252dc6658b0794dad7218442/Items/jsabins_GunKit_Make%203P%20from%201P.lua</source>
+      </version>
+      <version name="2.0.0" author="Jay Sabins" time="2026-11-25T20:11:11Z">
+        <changelog><![CDATA[Now works from selected folder items instead of whole tracks.
+Select the 1P folder items of the shots you want and run: each shot's 3P copy is placed right after it on the timeline, on a 3P track group, and everything later in the project moves right to make room (items, regions, markers, automation).
+A region named like the shot's original region (1P -> 3P) is added around the 3P copy.
+The 3P track group is made the first time and reused after that, so running it on more shots doesn't create more tracks.
+Fixed layers coming out staggered: items are now collected before anything moves.]]></changelog>
+        <source main="main">https://github.com/jaysabins/reascripts/raw/a454f85c3cb72ae8a3f5f74f29c2022ea83ef7c0/Items/jsabins_GunKit_Make%203P%20from%201P.lua</source>
       </version>
     </reapack>
     <reapack name="jsabins_GunKit_RPM.lua" type="script" desc="GunKit RPM (respace folder items by rounds per minute)">
