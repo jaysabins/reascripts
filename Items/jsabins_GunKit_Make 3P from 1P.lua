@@ -1,7 +1,9 @@
 -- @description GunKit: Make 3P from 1P
 -- @author Jay Sabins
--- @version 1.0.0
--- @changelog Initial release
+-- @version 1.1.0
+-- @changelog
+--   The new folder holding Body and Thump keeps Body's name (e.g. ..._3P_..._Body) instead of ..._Body_Thump.
+--   The copy's items (and automation) move to the right, starting 1 second after the original group's last item ends, so they don't sit under the original.
 -- @about
 --   Makes a third-person (3P) version of a first-person (1P) gun layer group.
 --
@@ -12,10 +14,12 @@
 --
 --   For each group the script duplicates the folder and everything in it, right
 --   below the original, and then on the copy only:
+--     - moves all items (and automation) to the right so the copy starts
+--       1 second after the original group's last item ends, timing kept
 --     - sets every take to its left channel only (mono, non-destructive: take
 --       channel mode "Left", so the source files are untouched)
---     - puts the Body and Thump folders inside one new folder track named after
---       Body ("..._Body_Thump"). Body and Thump keep their own tracks, FX and
+--     - puts the Body and Thump folders inside one new folder track with Body's
+--       name (e.g. "Wep_3P_..._Body"). Body and Thump keep their own tracks, FX and
 --       children, so their processing is unchanged; the new folder has no FX.
 --     - keeps Mech as it is
 --     - deletes the Pre track and everything inside it
@@ -30,6 +34,10 @@
 
 local r = reaper
 local TITLE = "GunKit: Make 3P from 1P"
+
+-- Gap (seconds) between the end of the original group's last item and the
+-- start of the 3P copy's first item.
+local GAP_AFTER_ORIGINAL = 1.0
 
 ----------------------------------------------------------------------
 -- Helpers
@@ -222,6 +230,44 @@ local function process_group(parent)
   end
   if not role.mech then notes[#notes + 1] = "no Mech track found" end
 
+  -- 4b. Move the copy to the right of the original: first item of the copy
+  -- starts GAP_AFTER_ORIGINAL seconds after the original's last item ends
+  local min_start, max_end = math.huge, -math.huge
+  for _, e in ipairs(orig) do
+    for i = 0, r.CountTrackMediaItems(e.tr) - 1 do
+      local item = r.GetTrackMediaItem(e.tr, i)
+      local pos = r.GetMediaItemInfo_Value(item, "D_POSITION")
+      local len = r.GetMediaItemInfo_Value(item, "D_LENGTH")
+      if pos < min_start then min_start = pos end
+      if pos + len > max_end then max_end = pos + len end
+    end
+  end
+  if max_end > min_start then
+    local offset = (max_end - min_start) + GAP_AFTER_ORIGINAL
+    for _, e in ipairs(dup) do
+      if not delete[e.tr] then
+        for i = 0, r.CountTrackMediaItems(e.tr) - 1 do
+          local item = r.GetTrackMediaItem(e.tr, i)
+          r.SetMediaItemInfo_Value(item, "D_POSITION", r.GetMediaItemInfo_Value(item, "D_POSITION") + offset)
+        end
+        -- automation follows the items
+        for ei = 0, r.CountTrackEnvelopes(e.tr) - 1 do
+          local env = r.GetTrackEnvelope(e.tr, ei)
+          local np = r.CountEnvelopePointsEx(env, -1)
+          for pi = 0, np - 1 do
+            local ok, time = r.GetEnvelopePointEx(env, -1, pi)
+            if ok then r.SetEnvelopePointEx(env, -1, pi, time + offset, nil, nil, nil, nil, true) end
+          end
+          if np > 0 then r.Envelope_SortPointsEx(env, -1) end
+          for ai = 0, r.CountAutomationItems(env) - 1 do
+            local p0 = r.GetSetAutomationItemInfo(env, ai, "D_POSITION", 0, false)
+            r.GetSetAutomationItemInfo(env, ai, "D_POSITION", p0 + offset, true)
+          end
+        end
+      end
+    end
+  end
+
   -- 5. Mono from the left channel on every take of the copy (not the deleted Pre)
   for _, e in ipairs(dup) do
     if not delete[e.tr] then
@@ -268,16 +314,14 @@ local function process_group(parent)
   -- delete Pre
   for tr in pairs(delete) do r.DeleteTrack(tr) end
 
-  -- create the Body_Thump folder track
+  -- create the folder track that holds Body and Thump (named like Body)
   if #body_tracks > 0 then
     local body = body_tracks[1]
     local at = track_index(body)
     r.InsertTrackAtIndex(at, false)
     wrap = r.GetTrack(0, at)
     local bname = track_name(body)
-    local wname = bname:gsub("%f[%w]([Bb][Oo][Dd][Yy])%f[%W]", "%1_Thump", 1)
-    if wname == bname then wname = bname .. "_Thump" end
-    r.GetSetMediaTrackInfo_String(wrap, "P_NAME", wname, true)
+    r.GetSetMediaTrackInfo_String(wrap, "P_NAME", bname, true)
     local col = r.GetMediaTrackInfo_Value(body, "I_CUSTOMCOLOR")
     if col ~= 0 then r.SetMediaTrackInfo_Value(wrap, "I_CUSTOMCOLOR", col) end
     level_of[wrap] = level_of[body] - 1
